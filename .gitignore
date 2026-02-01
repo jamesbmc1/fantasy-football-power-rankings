@@ -1,0 +1,14 @@
+# Ignore cache files
+data/
+*.json
+
+# Ignore virtual environments
+venv/
+
+# Ignore Python Cache & Testing Junk
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# MAC OS system files
+.DS_Store
