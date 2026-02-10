@@ -10,7 +10,6 @@ if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
 from src.api_clients.sleeper import SleeperAPIClient
-from src.utils.visualizer import luck_vs_skill_plot, league_standings
 
 # Helper to get matchup data as DataFrame
 def get_dataframe_for_matchups(league_id, week, refresh=False):
@@ -138,6 +137,15 @@ def get_projections(league_id, week, season):
 def get_z_score(series):
     return (series - series.mean()) / series.std()
 
+# Aggregrates Data into Season Totals
+def calculate_season_aggregates(df):
+    return df.groupby('roster_id').agg({
+        'all_play_wins': 'sum',
+        'all_play_losses': 'sum', 
+        'z_score': 'sum',
+        'points': 'sum'
+    }).reset_index()
+
 # Helper to calculate power rankings
 def get_power_rankings(season_df, record_df, projections_df, weights=None):
     if weights is None:
@@ -147,14 +155,12 @@ def get_power_rankings(season_df, record_df, projections_df, weights=None):
             'projected_points': 0.2
         }
 
-    # Merge the DataFrames on 'roster_id'
+    # Merge the df on 'roster_id'
     merged_df = season_df.merge(record_df, on='roster_id').merge(projections_df, on='roster_id')
-
 
     merged_df['z_points'] = get_z_score(merged_df['points'])
     merged_df['z_wins'] = get_z_score(merged_df['wins'])
     merged_df['z_projected_points'] = get_z_score(merged_df['projected_points'])
-
 
     # Calculate the weighted score
     merged_df['composite_score'] = (
@@ -163,7 +169,7 @@ def get_power_rankings(season_df, record_df, projections_df, weights=None):
         merged_df['z_projected_points'] * weights['projected_points']
     )
 
-    # We map the Z-Score to a T-Score distribution (Mean=50, StdDev=10)
+    # Map the Z-Score to a T-Score distribution (Mean=50, StdDev=10)
     merged_df['power_index'] = 50 + (merged_df['composite_score'] * 10) 
 
     merged_df['power_index'] = merged_df['power_index'].clip(0, 100)
@@ -172,6 +178,46 @@ def get_power_rankings(season_df, record_df, projections_df, weights=None):
     ranked_df = merged_df.sort_values(by='power_index', ascending=False).reset_index(drop=True)
     ranked_df['rank'] = range(1, len(ranked_df) + 1)
 
-    ranked_df
+    return ranked_df[['rank', 'owner_id', 'power_index', 'z_points', 'z_wins', 'z_projected_points']].round(4)   
 
-    return ranked_df[['rank', 'owner_id', 'power_index', 'z_points', 'z_wins', 'z_projected_points']].round(4)    
+def get_season_projection_data(league_id, current_week, season):
+    all_projections = []
+    
+    for wk in range(1, current_week + 1):
+        weekly_df = get_projections(league_id, wk, season)
+        weekly_df['week'] = wk
+        all_projections.append(weekly_df)
+        
+        if not all_projections:
+            return pd.DataFrame()
+        
+    return pd.concat(all_projections, ignore_index=True)
+
+
+def get_owner_fluctuation(league_id, target_name, current_week):
+    season = os.getenv("SEASON")
+    full_season_data = get_season_matchups_data(league_id, current_week)
+    record_df = get_true_record(league_id)
+    full_season_projections = get_season_projection_data(league_id, current_week, season)
+    
+    fluctuation_data = []
+
+    for wk in range(1, current_week + 1):
+        historical_filter = full_season_data[full_season_data['week'] <= wk]
+        historical_agg = calculate_season_aggregates(historical_filter)
+        
+        proj_filter = full_season_projections[full_season_projections['week'] <= wk]
+        prog_agg = proj_filter.groupby('roster_id')['projected_points'].sum().reset_index()
+        
+        historical_ranks = get_power_rankings(historical_agg, record_df, prog_agg)
+    
+        user_row = historical_ranks[historical_ranks['owner_id'] == target_name]        
+        if not user_row.empty:
+            fluctuation_data.append({
+                'week': wk,
+                'owner_id': target_name,
+                'rank': user_row.iloc[0]['rank'],
+                'power_index': user_row.iloc[0]['power_index']
+            })
+
+    return pd.DataFrame(fluctuation_data) 

@@ -4,6 +4,7 @@ data/
 
 # Ignore virtual environments
 venv/
+.env
 
 # Ignore Python Cache & Testing Junk
 __pycache__/

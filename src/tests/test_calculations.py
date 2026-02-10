@@ -98,7 +98,6 @@ def test_calculate_player_score(mock_league_scoring):
 
 def test_get_projections(mock_league_scoring, get_matchup_response, get_projections_response):
     with patch('src.utils.calculations.SleeperAPIClient') as MockClient:
-        # Mock Client
         mock_client_instance = MockClient.return_value
         
         mock_client_instance.get_league_info.return_value = {
@@ -108,10 +107,8 @@ def test_get_projections(mock_league_scoring, get_matchup_response, get_projecti
         mock_client_instance.get_matchups.return_value = get_matchup_response
         mock_client_instance.get_weekly_projections.return_value = get_projections_response
 
-        # Run the function
         df_projections = get_projections(league_id="test_league", week=2, season=2025)
 
-        # Verify the math matches
         expected_data = {
             "roster_id": [1, 2],
             "projected_points": [38.0, 0.0]
@@ -131,12 +128,12 @@ def test_get_power_rankings(sample_season_df, sample_record_df, sample_projectio
         projections_df=sample_projections_df
     )
 
-    expected_cols = ['roster_id', 'owner_id', 'power_ranking_score']
+    expected_cols = ['rank', 'owner_id', 'power_index', 'z_points', 'z_wins', 'z_projected_points']
     assert list(rankings_df.columns) == expected_cols
 
     # The DataFrame must be returned sorted by score (Highest first)
-    top_score = rankings_df.iloc[0]['power_ranking_score']
-    bottom_score = rankings_df.iloc[-1]['power_ranking_score']
+    top_score = rankings_df.iloc[0]['power_index']
+    bottom_score = rankings_df.iloc[-1]['power_index']
     
     assert top_score >= bottom_score
 

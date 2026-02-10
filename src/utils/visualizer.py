@@ -35,11 +35,27 @@ def league_standings(df):
         x='owner_id',
         y='power_index',            
         color='power_index',
-            color_continuous_scale=px.colors.sequential.Viridis,
+            color_continuous_scale=px.colors.sequential.Blues,
             title='League Standings by Power Index',
             labels={
                 'owner_id': 'Team Owner',
                 'power_index': 'Power Index'
+            }
+        )
+    fig.show()
+    
+def user_trends(df, owner_id): 
+    fig = px.line(
+        df.sort_values(by='week'), 
+        x='week',
+        y='power_index',
+        title=f'{owner_id} Power Index By Week',
+        hover_data=['rank', 'power_index'],
+        markers=True,
+        labels={
+            'week': 'Week',
+            'rank': 'Rank',
+            'power_index': 'Power Index'
             }
         )
     fig.show()
