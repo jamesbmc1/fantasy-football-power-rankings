@@ -44,8 +44,6 @@ def get_season_matchups_data(league_id, week):
         all_week_matchups.append(df_matchups)
 
     df_all_matchups = pd.concat(all_week_matchups, ignore_index=True)
-    print("\n--- All Matchups Data ---")
-    print(df_all_matchups)
 
     # Calculate the rank for each team within their specific week
     # We use method='min' to handle ties (e.g., if two teams tie for 1st, they both get rank 1)
@@ -110,7 +108,6 @@ def get_projections(league_id, week, season):
 
     matchups = client.get_matchups(week=week)
     
-    # This should return the raw stats for every player, not just pre-calculated points
     projections_map = client.get_weekly_projections(season, week)
 
     projections = []
@@ -123,7 +120,7 @@ def get_projections(league_id, week, season):
             if not player_data:
                 continue  
 
-            # Use the new helper to calculate score based on league rules
+            # Calculate the player score for each starter and sum 
             player_score = calculate_player_score(player_data, scoring_settings)
             total_projected_points += player_score
             
