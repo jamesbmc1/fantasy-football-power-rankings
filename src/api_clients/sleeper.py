@@ -2,80 +2,85 @@ from numpy import rint
 import requests
 import json
 import os
-from pathlib import Path
+import time
+import sys
+import httpx
+from fastapi import HTTPException
 
 class SleeperAPIClient:
-    def __init__(self, league_id=None):
-        self.league_id = league_id
-        self.session = requests.Session()
-        self.baseurl = "https://api.sleeper.app/v1/"
-
-        #This finds the directory where sleeper.py
-        current_file_path = Path(__file__).resolve()
-
-        # This moves up two levels to the project root, then into 'data'
-        self.data_dir = current_file_path.parent.parent.parent / "data"
-        self.data_dir.mkdir(exist_ok=True)
+    def __init__(self):
         
+        self.base_url = "https://api.sleeper.app/v1/"
+        self.league_id = os.getenv("SLEEPER_LEAGUE_ID")
+        self.season = os.getenv("SEASON")
+        self.players_file = "nfl_players_cache.json"
+        
+    async def _fetch(self, endpoint: str):
+        url = f"{self.base_url}/{endpoint}"
+        
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(url)
+                response.raise_for_status()
+                return response.json()
 
-    def _make_request(self, endpoint, cache_filename=None, refresh=False):
-        json_data = None
-        cache_path = self.data_dir / cache_filename if cache_filename else None
-
-        if cache_filename and not refresh:
-            if cache_path.exists():
-                try:
-                    with open(cache_path, 'r') as cache_file:
-                        json_data = json.load(cache_file)
-                        print(f"Loaded {cache_filename} from cache")
-                        return json_data
+            except httpx.HTTPStatusError as exc:
+                # This handles the "Response came back, but it was an error"
+                error_msg = f"Sleeper API Error: {exc.response.text}"
+                status = exc.response.status_code
                 
-                except (FileNotFoundError, json.JSONDecodeError) as e:
-                    print(f"No cache found ({e})")
+                if status == 404:
+                    raise HTTPException(status_code=404, detail=f"Resource not found at {endpoint}")
+                
+                raise HTTPException(status_code=status, detail=error_msg)
 
-        url = f"{self.baseurl}{endpoint}"
-        response = self.session.get(url)
-        response.raise_for_status()
-        json_data = response.json()
-        print(f"Fetched from API ({endpoint})")
-
-        if cache_filename:
-            with open(cache_path, 'w') as cache_file:
-                json.dump(json_data, cache_file)
-
-        return json_data
+            except httpx.RequestError as exc:
+                # This handles "No Internet" or "DNS Failed"
+                raise HTTPException(status_code=503, detail=f"Network Error: {str(exc)}")
+        
         
     #Get The User Information
-    def get_league_users(self, league_id=None, refresh=False):
-        target_id = league_id or self.league_id
-        endpoint = f"league/{target_id}/users"
-        return self._make_request(endpoint, f"users_{target_id}.json", refresh)
+    async def get_league_users(self):
+       return await self._fetch(f"league/{self.league_id}/users")
+            
 
     #Get The League Information
-    def get_league_info(self, league_id=None, refresh=False):
-        target_id = league_id or self.league_id
-        endpoint = f"/league/{target_id}"
-        return self._make_request(endpoint, f"league_{target_id}.json", refresh)
+    async def get_league_info(self):
+        return await self._fetch(f"league/{self.league_id}")
+        
 
     #Get The League Rosters
-    def get_league_rosters(self, league_id=None, refresh=False):
-        target_id = league_id or self.league_id
-        endpoint = f"/league/{target_id}/rosters"
-        return self._make_request(endpoint, f"rosters_{target_id}.json", refresh)
+    async def get_league_rosters(self):
+        return await self._fetch(f"league/{self.league_id}/rosters")
 
     #Get The League Matchups
-    def get_matchups(self, week, league_id=None, refresh=False):
-        target_id = league_id or self.league_id
-        endpoint = f"/league/{target_id}/matchups/{week}"
-        return self._make_request(endpoint, f"matchups_{target_id}_wk{week}.json", refresh)
-    
-    # Get all NFL players
-    def get_all_nfl_players(self, refresh=False):
-        endpoint = "/players/nfl"
-        return self._make_request(endpoint, "nfl_players.json", refresh)
+    async def get_matchups(self, week: int):
+        return await self._fetch(f"league/{self.league_id}/matchups/{week}")
     
     # Fetches projections for every NFL player for a specific week.
-    def get_weekly_projections(self, season, week, refresh=False):
-        endpoint = f"/projections/nfl/regular/{season}/{week}"
-        cache_file = f"projections_{season}_wk{week}.json"
-        return self._make_request(endpoint, cache_file, refresh)
+    async def get_weekly_projections(self, week: int):
+        return await self._fetch(f"/projections/nfl/regular/{self.season}/{week}")
+    
+    # # Get all NFL players
+    # async def get_all_nfl_players(self):
+    #     is_fresh = False
+        
+    #     if os.path.exists(self.players_file):
+    #         file_age = time.time() - os.path.getmtime(self.players_file)
+            
+    #         # Less than 3 days old
+    #         if file_age < 259200:
+    #             is_fresh = True
+
+    #     if is_fresh:
+    #         print("Loading players from local cache (Fresh < 3 days)...")
+    #         with open(self.players_file, 'r') as f:
+    #             return json.load(f)
+        
+    #     print("Fetching players from Sleeper API (this takes a moment)...")
+    #     data = await self._fetch("players/nfl")
+        
+    #     with open(self.players_file, 'w') as f:
+    #         json.dump(data, f)
+            
+    #     return data

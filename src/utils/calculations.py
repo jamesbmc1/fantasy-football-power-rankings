@@ -3,24 +3,14 @@ from pathlib import Path
 import os
 import sys
 
-current_file = Path(__file__).resolve()
-project_root = current_file.parent.parent.parent
+    
+# Helper to map user_id to display name
+def create_users_map(users_data):
+    return {u['user_id']: u['display_name'] for u in users_data}
 
-if str(project_root) not in sys.path:
-    sys.path.append(str(project_root))
-
-from src.api_clients.sleeper import SleeperAPIClient
-
-# Helper to get matchup data as DataFrame
-def get_dataframe_for_matchups(league_id, week, refresh=False):
-        if not refresh and os.path.exists(f'data/matchups_{league_id}_wk{week}.json'):
-            df = pd.read_json(f'data/matchups_{league_id}_wk{week}.json')[['roster_id', 'points', 'matchup_id']]
-            return df
-        
-        client = SleeperAPIClient(league_id=league_id)
-        matchups = client.get_matchups(week=week, refresh=refresh)
-        df = pd.read_json(f'data/matchups_{league_id}_wk{week}.json')[['roster_id', 'points', 'matchup_id']]
-        return df
+#Helper to map roster_id to user_id
+def create_rosters_map(rosters_data):
+    return {r['roster_id']: r['owner_id'] for r in rosters_data}
 
 
 # Helper to calculate Z-Scores for points within each week
@@ -30,63 +20,51 @@ def calculate_z_scores(df, score_column='points'):
     df['z_score'] = ((df[score_column] - mean_score) / std_dev_score).fillna(0)
     return df
         
+def get_z_score(series):
+    return (series - series.mean()) / series.std()
 
-def get_season_matchups_data(league_id, week):
-    all_week_matchups = []
-    client = SleeperAPIClient(league_id=league_id)
-    number_of_players = len(client.get_league_rosters())
-    total_possible_games_per_week = number_of_players - 1
 
+def process_matchups_data(all_matchups_data, total_rosters):
+    if not all_matchups_data:
+        return pd.DataFrame()
     
-    for wk in range(1, week + 1):
-        df_matchups = get_dataframe_for_matchups(league_id, wk)
-        df_matchups['week'] = wk
-        all_week_matchups.append(df_matchups)
+    total_possible_games_per_week = total_rosters - 1
 
-    df_all_matchups = pd.concat(all_week_matchups, ignore_index=True)
+    df_all_matchups = pd.concat(all_matchups_data, ignore_index=True)
 
-    # Calculate the rank for each team within their specific week
-    # We use method='min' to handle ties (e.g., if two teams tie for 1st, they both get rank 1)
-    # 14 is highest 1 is lowest value
+    # Rank Points for Week
     df_all_matchups['rank'] = df_all_matchups.groupby('week')['points'].rank(method='min', ascending=True)
+    
+    # Calculate All Play Record (The Record for if they played every team that week)
     df_all_matchups['all_play_wins'] = df_all_matchups['rank'] - 1
     df_all_matchups['all_play_losses'] = total_possible_games_per_week - df_all_matchups['all_play_wins']
 
     df_all_matchups = calculate_z_scores(df_all_matchups, score_column='points')
     return df_all_matchups
 
-# Helper to map roster_id to owner name
-def id_to_name(client, roster_id):
-    rosters = client.get_league_rosters()
-    users = client.get_league_users()
-    roster_map = {roster['roster_id']: roster['owner_id'] for roster in rosters}
-    user_map = {user['user_id']: user['display_name'] for user in users}
-    owner_id = roster_map.get(roster_id, 'Unknown')
-    return user_map.get(owner_id, 'Unknown')
-
-# Helper to get true records from the API
-def get_true_record(league_id):
-     client = SleeperAPIClient(league_id=league_id)
-     rosters = client.get_league_rosters()
-     true_records = []
-
-     for roster in rosters:
+# Helper to get true record 
+def get_true_record(users_data, rosters_data):
+    user_map = create_users_map(users_data)
+    roster_map = create_rosters_map(rosters_data)
+    
+    records = []
+    for roster in rosters_data:
         roster_id = roster['roster_id']
-        username = id_to_name(client, roster_id)
-        wins = roster['settings'].get('wins', 0)
-        losses = roster['settings'].get('losses', 0)
-        ties = roster['settings'].get('ties', 0)
-        true_records.append({
+        
+        owner_id = roster_map.get(roster_id)
+        display_name = user_map.get(owner_id, "Unknown")
+        
+        settings = roster.get('settings', {})
+        
+        records.append({
             'roster_id': roster_id,
-            'owner_id': username,
-            'wins': wins,
-            'losses': losses,
-            'ties': ties
+            'owner_id': display_name,
+            'wins': settings.get('wins', 0),
+            'losses': settings.get('losses', 0),
+            'ties': settings.get('ties', 0)
         })       
 
-        df = pd.DataFrame(true_records)
-        
-     return df
+    return pd.DataFrame(records)
      
 
 # Helper to calculate player score based on league scoring settings
@@ -99,30 +77,25 @@ def calculate_player_score(player_data, scoring_settings):
     return score
 
 # Helper to get projections DataFrame
-def get_projections(league_id, week, season):
-    client = SleeperAPIClient(league_id=league_id)
-    
-    #Fetch the league's custom scoring rules
-    league_data = client.get_league_info() 
+def get_projections(league_data, matchups_data, weekly_projections_data):
     scoring_settings = league_data.get('scoring_settings', {})
 
-    matchups = client.get_matchups(week=week)
-    
-    projections_map = client.get_weekly_projections(season, week)
-
     projections = []
-    for matchup in matchups:
+    for matchup in matchups_data:
         total_projected_points = 0
-        for player_id in matchup['starters']:
-            player_data = projections_map.get(str(player_id), {})
-
-            # No projection/free agent
-            if not player_data:
-                continue  
-
-            # Calculate the player score for each starter and sum 
-            player_score = calculate_player_score(player_data, scoring_settings)
-            total_projected_points += player_score
+        starters = matchup.get('starters', [])
+        
+        # No projection/free agent
+        if starters is None:
+            starters = []
+        
+        for player_id in starters:
+            player_stats = weekly_projections_data.get(str(player_id), {})
+            
+            if not player_stats:
+                continue
+            
+            total_projected_points += calculate_player_score(player_stats, scoring_settings)
             
         projections.append({
             'roster_id': matchup['roster_id'],
@@ -131,8 +104,6 @@ def get_projections(league_id, week, season):
 
     return pd.DataFrame(projections)
 
-def get_z_score(series):
-    return (series - series.mean()) / series.std()
 
 # Aggregrates Data into Season Totals
 def calculate_season_aggregates(df):
@@ -168,7 +139,6 @@ def get_power_rankings(season_df, record_df, projections_df, weights=None):
 
     # Map the Z-Score to a T-Score distribution (Mean=50, StdDev=10)
     merged_df['power_index'] = 50 + (merged_df['composite_score'] * 10) 
-
     merged_df['power_index'] = merged_df['power_index'].clip(0, 100)
 
     # Sort by the power ranking score in descending order
@@ -177,44 +147,32 @@ def get_power_rankings(season_df, record_df, projections_df, weights=None):
 
     return ranked_df[['rank', 'owner_id', 'power_index', 'z_points', 'z_wins', 'z_projected_points']].round(4)   
 
-def get_season_projection_data(league_id, current_week, season):
-    all_projections = []
-    
-    for wk in range(1, current_week + 1):
-        weekly_df = get_projections(league_id, wk, season)
-        weekly_df['week'] = wk
-        all_projections.append(weekly_df)
-        
-        if not all_projections:
-            return pd.DataFrame()
-        
-    return pd.concat(all_projections, ignore_index=True)
 
-
-def get_owner_fluctuation(league_id, target_name, current_week):
-    season = os.getenv("SEASON")
-    full_season_data = get_season_matchups_data(league_id, current_week)
-    record_df = get_true_record(league_id)
-    full_season_projections = get_season_projection_data(league_id, current_week, season)
+def calculate_trend_lines(season_df, record_df, projections_df, target_owner_name):   
+    trend_data = []
+    max_week = int(season_df['week'].max())
     
-    fluctuation_data = []
-
-    for wk in range(1, current_week + 1):
-        historical_filter = full_season_data[full_season_data['week'] <= wk]
-        historical_agg = calculate_season_aggregates(historical_filter)
+    for wk in range(1, max_week + 1):
+        matchups_slice = season_df[season_df['week'] <= wk]
+        projections_slice = projections_df[projections_df['week'] <= wk]
         
-        proj_filter = full_season_projections[full_season_projections['week'] <= wk]
-        prog_agg = proj_filter.groupby('roster_id')['projected_points'].sum().reset_index()
+        # 2. Aggregate
+        aggs = calculate_season_aggregates(matchups_slice)
         
-        historical_ranks = get_power_rankings(historical_agg, record_df, prog_agg)
-    
-        user_row = historical_ranks[historical_ranks['owner_id'] == target_name]        
+        # 3. For trends, we usually compare against Projected Points Total up to that week
+        proj_aggs = projections_slice.groupby('roster_id')['projected_points'].sum().reset_index()
+        
+        # 4. Rank
+        rankings = get_power_rankings(aggs, record_df, proj_aggs)
+        
+        # 5. Extract the target owner's rank for this specific week
+        user_row = rankings[rankings['owner_id'] == target_owner_name]
+        
         if not user_row.empty:
-            fluctuation_data.append({
+            trend_data.append({
                 'week': wk,
-                'owner_id': target_name,
-                'rank': user_row.iloc[0]['rank'],
-                'power_index': user_row.iloc[0]['power_index']
+                'rank': int(user_row.iloc[0]['rank']),
+                'power_index': float(user_row.iloc[0]['power_index'])
             })
-
-    return pd.DataFrame(fluctuation_data) 
+            
+    return pd.DataFrame(trend_data)
