@@ -16,7 +16,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "https://fantasy-football-power-rankings-black.vercel.app/"
+        "https://fantasy-football-power-rankings-black.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
