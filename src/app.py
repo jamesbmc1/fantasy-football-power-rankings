@@ -61,10 +61,11 @@ async def fetch_projections_up_to_week(season: str, current_week: int):
     return projections
 
 def format_df_to_json(df: pd.DataFrame):
-    if 'power_index' in df.columns:
-        df['power_index'] = df['power_index'].fillna(50)
-    
-    return df.fillna(0).to_dict(orient="records")
+    """
+    Helper to safely convert a Pandas DataFrame into a List of Dictionaries
+    so FastAPI can return it as JSON to the frontend.
+    """
+    return df.to_dict(orient="records")
 
 
 @app.get("/rankings/{league_id}/{week}")
