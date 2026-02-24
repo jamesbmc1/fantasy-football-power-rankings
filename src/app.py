@@ -1,8 +1,8 @@
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from api_clients.sleeper import SleeperAPIClient
-from utils.calculations import process_matchups_data, get_true_record, get_power_rankings, calculate_trend_lines, get_projections, calculate_season_aggregates
+from src.api_clients.sleeper import SleeperAPIClient
+from src.utils.calculations import process_matchups_data, get_true_record, get_power_rankings, calculate_trend_lines, get_projections, calculate_season_aggregates
 import asyncio
 import uvicorn
 from dotenv import load_dotenv
