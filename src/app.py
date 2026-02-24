@@ -13,8 +13,12 @@ load_dotenv()
 
 # Allows Communication between Python and Frontend
 app.add_middleware(
-    CORSMiddleware, 
-    allow_origins=["*"], #replace with your frontend URL
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "https://fantasy-football-power-rankings-8vb.vercel.app"
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
