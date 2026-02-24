@@ -86,7 +86,6 @@ def get_projections(league_data, matchups_data, weekly_projections_data):
         total_projected_points = 0
         starters = matchup.get('starters', [])
         
-        # No projection/free agent
         if starters is None:
             starters = []
         
@@ -124,7 +123,6 @@ def get_power_rankings(season_df, record_df, projections_df, weights=None):
             'projected_points': 0.2
         }
 
-    # Merge the df on 'roster_id'
     merged_df = season_df.merge(record_df, on='roster_id').merge(projections_df, on='roster_id')
 
     merged_df['z_points'] = get_z_score(merged_df['points'])
@@ -159,16 +157,12 @@ def calculate_trend_lines(season_df, record_df, projections_df, target_owner_nam
         matchups_slice = season_df[season_df['week'] <= wk]
         projections_slice = projections_df[projections_df['week'] <= wk]
         
-        # 2. Aggregate
         aggs = calculate_season_aggregates(matchups_slice)
         
-        # 3. For trends, we usually compare against Projected Points Total up to that week
         proj_aggs = projections_slice.groupby('roster_id')['projected_points'].sum().reset_index()
         
-        # 4. Rank
         rankings = get_power_rankings(aggs, record_df, proj_aggs)
         
-        # 5. Extract the target owner's rank for this specific week
         user_row = rankings[rankings['owner_id'] == target_owner_name]
         
         if not user_row.empty:

@@ -26,10 +26,6 @@ app.add_middleware(
 client = SleeperAPIClient()
 
 async def fetch_base_league_data(league_id: str):
-    """
-    Helper to fetch the static league data that doesn't change week-to-week.
-    Returns: A tuple or dict containing users, rosters, and league info.
-    """
     league_info, users_data = await asyncio.gather(
         client.get_league_info(league_id),
         client.get_league_users(league_id),
@@ -41,30 +37,19 @@ async def fetch_base_league_data(league_id: str):
     }
 
 async def fetch_matchups_up_to_week(league_id: str, current_week: int):
-    """
-    Helper to concurrently fetch matchup data from week 1 to current_week.
-    
-    Returns: A list of matchup data for each week.
-    """
     tasks = [client.get_matchups(league_id, wk) for wk in range(1, current_week + 1)]
     matchups = await asyncio.gather(*tasks)
     return matchups
         
         
 async def fetch_projections_up_to_week(season: str, current_week: int):
-    """
-    Helper to concurrently fetch projection data from week 1 to current_week.
-    Returns: A list or dictionary of projections mapped by week.
-    """
     tasks = [client.get_weekly_projections(season, wk) for wk in range(1, current_week + 1)]
     projections = await asyncio.gather(*tasks)
     return projections
 
 def format_df_to_json(df: pd.DataFrame):
-    """
-    Helper to safely convert a Pandas DataFrame into a List of Dictionaries
-    so FastAPI can return it as JSON to the frontend.
-    """
+    # Helper to safely convert a Pandas DataFrame into a List of Dictionaries 
+    # so FastAPI can return it as JSON to the frontend.
     return df.to_dict(orient="records")
 
 
