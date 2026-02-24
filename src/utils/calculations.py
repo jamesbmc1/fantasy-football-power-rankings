@@ -13,11 +13,12 @@ def create_rosters_map(rosters_data):
     return {r['roster_id']: r['owner_id'] for r in rosters_data}
 
 
-# Helper to calculate Z-Scores for points within each week
 def calculate_z_scores(df, score_column='points'):
     mean_score = df.groupby('week')[score_column].transform('mean')
     std_dev_score = df.groupby('week')[score_column].transform('std')
-    df['z_score'] = ((df[score_column] - mean_score) / std_dev_score).fillna(0)
+    
+    # replace(0, 1) prevents dividing by zero!
+    df['z_score'] = ((df[score_column] - mean_score) / std_dev_score.replace(0, 1)).fillna(0)
     return df
         
 def get_z_score(series):
@@ -129,6 +130,8 @@ def get_power_rankings(season_df, record_df, projections_df, weights=None):
     merged_df['z_points'] = get_z_score(merged_df['points'])
     merged_df['z_wins'] = get_z_score(merged_df['wins'])
     merged_df['z_projected_points'] = get_z_score(merged_df['projected_points'])
+    
+    merged_df[['z_points', 'z_wins', 'z_projected_points']] = merged_df[['z_points', 'z_wins', 'z_projected_points']].fillna(0)
 
     # Calculate the weighted score
     merged_df['composite_score'] = (
