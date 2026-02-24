@@ -11,9 +11,6 @@ class SleeperAPIClient:
     def __init__(self):
         
         self.base_url = "https://api.sleeper.app/v1/"
-        self.league_id = os.getenv("SLEEPER_LEAGUE_ID")
-        self.season = os.getenv("SEASON")
-        self.players_file = "nfl_players_cache.json"
         
     async def _fetch(self, endpoint: str):
         url = f"{self.base_url}/{endpoint}"
@@ -40,47 +37,21 @@ class SleeperAPIClient:
         
         
     #Get The User Information
-    async def get_league_users(self):
-       return await self._fetch(f"league/{self.league_id}/users")
+    async def get_league_users(self, league_id: str):
+       return await self._fetch(f"league/{league_id}/users")
             
-
-    #Get The League Information
-    async def get_league_info(self):
-        return await self._fetch(f"league/{self.league_id}")
+    # 2. Pass league_id as an argument
+    async def get_league_info(self, league_id: str):
+        return await self._fetch(f"league/{league_id}")
         
+    # 3. Pass league_id as an argument
+    async def get_league_rosters(self, league_id: str):
+        return await self._fetch(f"league/{league_id}/rosters")
 
-    #Get The League Rosters
-    async def get_league_rosters(self):
-        return await self._fetch(f"league/{self.league_id}/rosters")
-
-    #Get The League Matchups
-    async def get_matchups(self, week: int):
-        return await self._fetch(f"league/{self.league_id}/matchups/{week}")
+    # 4. Pass league_id AND week
+    async def get_matchups(self, league_id: str, week: int):
+        return await self._fetch(f"league/{league_id}/matchups/{week}")
     
-    # Fetches projections for every NFL player for a specific week.
-    async def get_weekly_projections(self, week: int):
-        return await self._fetch(f"/projections/nfl/regular/{self.season}/{week}")
-    
-    # # Get all NFL players
-    # async def get_all_nfl_players(self):
-    #     is_fresh = False
-        
-    #     if os.path.exists(self.players_file):
-    #         file_age = time.time() - os.path.getmtime(self.players_file)
-            
-    #         # Less than 3 days old
-    #         if file_age < 259200:
-    #             is_fresh = True
-
-    #     if is_fresh:
-    #         print("Loading players from local cache (Fresh < 3 days)...")
-    #         with open(self.players_file, 'r') as f:
-    #             return json.load(f)
-        
-    #     print("Fetching players from Sleeper API (this takes a moment)...")
-    #     data = await self._fetch("players/nfl")
-        
-    #     with open(self.players_file, 'w') as f:
-    #         json.dump(data, f)
-            
-    #     return data
+    # 5. Pass season AND week (Also removed the leading slash bug)
+    async def get_weekly_projections(self, season: str, week: int):
+        return await self._fetch(f"projections/nfl/regular/{season}/{week}")
