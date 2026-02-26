@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-// We will create these view files in the next step!
+
 import DashboardView from '../views/DashboardView.vue'
 import TeamTrendsView from '../views/TeamTrendsView.vue'
 
