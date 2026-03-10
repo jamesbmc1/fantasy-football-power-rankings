@@ -12,7 +12,7 @@ The architecture follows a cloud-native approach, utilizing a FastAPI backend fo
 
 The project is divided into three primary layers:
 
-#### 1. Backend Orchestration (FastAPI)**
+#### 1. Backend Orchestration (FastAPI)
 
 The backend serves as a high-performance middleware that manages the complex lifecycle of league data retrieval.
 
@@ -64,13 +64,6 @@ $$Power Index = 50 + (Composite Z-Score \times 10)$$
 This results in a distribution where 50 represents the league average. A score of 60 indicates a team is one standard deviation above average, while a 40 indicates one standard deviation below.
 
 
-## Environment and Deployment
-- **Runtime:** Python 3.11.4
-- **Backend Infrastructure:** Render (Web Service)
-- **Frontend Infrastructure:** Vercel
-- **API Client:** Custom asynchronous Sleeper API wrapper
-
-
 ## How to Use the Platform
 You can access the live deployment to analyze your own Sleeper league performance.
 
@@ -90,11 +83,18 @@ Navigate to the live site: https://fantasy-football-power-rankings-black.vercel.
 #### 3. Analyze League Rankings
 Once the data loads, the dashboard displays a comprehensive leaderboard.
 
-**Power Index**: The primary metric for overall team strength, centered at 50.
-**Z-Points & Z-Wins**: These represent Standard Deviations from the league average. 
-  - **Positive Scores (+1.0 to +3.0)**: Indicate the manager is performing above the league average. A +2.0 means they are in the top 2.5% of historical performances for that metric.
-  - **Zero (0.0)**: Represents exactly average performance.
-  - **Negative Scores (-1.0 to -3.0)**: Indicate the manager is struggling relative to the field. A -2.0 suggests they are performing worse than 97.5% of the league.
+**1. Power Index (The Big Picture)**
+The **Power Index** is your team's "Overall Rating." It combines scoring, winning, and future potential into a single number.
 
-  #### 4. Explore Individual Trends
-  Click on any **Manager's Name** in the table to view their Season Trends. This provides a week-by-week visualization of their Power Index and League Rank, allowing you to track momentum and statistical consistency throughout the season.
+- **Centered at 50:** A score of 50.00 represents a perfectly average team.
+- **The Scale:** Most teams will fall between 30 and 70.
+- **What it reveals:** It identifies who the "true" best teams are by stripping away schedule luck. A team with a mediocre record but a high Power Index is statistically a powerhouse that has simply been unlucky.
+
+#### 4. Explore Individual Trends
+Click on any **Manager's Name** in the table to view their Season Trends. This provides a week-by-week visualization of their Power Index and League Rank, allowing you to track momentum and statistical consistency throughout the season.
+
+## Environment and Deployment
+- **Runtime:** Python 3.11.4
+- **Backend Infrastructure:** Render (Web Service)
+- **Frontend Infrastructure:** Vercel
+- **API Client:** Custom asynchronous Sleeper API wrapper
