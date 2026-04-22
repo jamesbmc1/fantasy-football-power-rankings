@@ -95,28 +95,28 @@ const loadRankings = async () => {
               <th scope="col" class="px-6 py-4">Rank</th>
               <th scope="col" class="px-6 py-4">Manager</th>
               <th scope="col" class="px-6 py-4">Power Index</th>
-              <th scope="col" class="px-6 py-4">Z-Points</th>
-              <th scope="col" class="px-6 py-4">Z-Wins</th>
+              <th scope="col" class="px-6 py-4">Z-Score Points</th>
+              <th scope="col" class="px-6 py-4">Z-Score All Play Wins</th>
             </tr>
           </thead>
           <tbody>
             <tr 
               v-for="team in rankings" 
-              :key="team.owner_id"
+              :key="team.owner_name"
               class="border-b border-slate-700/50 hover:bg-slate-700/50 transition-colors"
             >
               <td class="px-6 py-4 font-bold text-white text-lg">#{{ team.rank }}</td>
               <td class="px-6 py-4">
-                <router-link :to="`/trends/${leagueId}/${team.owner_id}`" class="font-bold text-emerald-400 hover:text-emerald-300 hover:underline">
-                  {{ team.owner_id }}
+                <router-link :to="`/trends/${leagueId}/${team.owner_name}`" class="font-bold text-emerald-400 hover:text-emerald-300 hover:underline">
+                  {{ team.owner_name }}
                 </router-link>
               </td>
               <td class="px-6 py-4 font-mono text-white">{{ team.power_index.toFixed(2) }}</td>
               <td class="px-6 py-4 font-mono" :class="team.z_points > 0 ? 'text-green-400' : 'text-red-400'">
                 {{ team.z_points > 0 ? '+' : '' }}{{ team.z_points.toFixed(2) }}
               </td>
-              <td class="px-6 py-4 font-mono" :class="team.z_wins > 0 ? 'text-green-400' : 'text-red-400'">
-                {{ team.z_wins > 0 ? '+' : '' }}{{ team.z_wins.toFixed(2) }}
+              <td class="px-6 py-4 font-mono" :class="team.z_all_play_wins > 0 ? 'text-green-400' : 'text-red-400'">
+                {{ team.z_all_play_wins > 0 ? '+' : '' }}{{ team.z_all_play_wins.toFixed(2) }}
               </td>
             </tr>
           </tbody>

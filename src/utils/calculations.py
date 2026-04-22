@@ -41,7 +41,8 @@ def process_matchups_data(all_matchups_data, total_rosters):
     df_all_matchups['all_play_losses'] = total_possible_games_per_week - df_all_matchups['all_play_wins']
 
     df_all_matchups = calculate_z_scores(df_all_matchups, score_column='points')
-    return df_all_matchups
+    return df_all_matchups[['week', 'roster_id', 'matchup_id', 'points', 'all_play_wins', 'all_play_losses', 'z_score']]
+
 
 # Helper to get true record 
 def get_true_record(users_data, rosters_data):
@@ -90,12 +91,13 @@ def get_projections(league_data, matchups_data, weekly_projections_data):
             starters = []
         
         for player_id in starters:
-            player_stats = weekly_projections_data.get(str(player_id), {})
+            player_data = weekly_projections_data.get(str(player_id), {})
             
-            if not player_stats:
-                continue
+            player_stats = player_data.get('stats', {})
+
             
-            total_projected_points += calculate_player_score(player_stats, scoring_settings)
+            if player_stats:
+                total_projected_points += calculate_player_score(player_stats, scoring_settings)
             
         projections.append({
             'roster_id': matchup['roster_id'],
@@ -113,28 +115,28 @@ def calculate_season_aggregates(df):
         'z_score': 'sum',
         'points': 'sum'
     }).reset_index()
-
+    
 # Helper to calculate power rankings
-def get_power_rankings(season_df, record_df, projections_df, weights=None):
+def get_power_rankings(season_df, projections_df, weights=None):
     if weights is None:
         weights = {
-            'points': 0.5,
-            'wins': 0.3,
-            'projected_points': 0.2
+            'points': 0.45,
+            'all_play_wins': 0.40,
+            'projected_points': 0.15
         }
 
-    merged_df = season_df.merge(record_df, on='roster_id').merge(projections_df, on='roster_id')
-
+    merged_df = season_df.merge(projections_df, on='roster_id')
+    
+    merged_df['z_all_play_wins'] = get_z_score(merged_df['all_play_wins'])
     merged_df['z_points'] = get_z_score(merged_df['points'])
-    merged_df['z_wins'] = get_z_score(merged_df['wins'])
     merged_df['z_projected_points'] = get_z_score(merged_df['projected_points'])
     
-    merged_df[['z_points', 'z_wins', 'z_projected_points']] = merged_df[['z_points', 'z_wins', 'z_projected_points']].fillna(0)
+    merged_df[['z_points', 'z_all_play_wins', 'z_projected_points']] = merged_df[['z_points', 'z_all_play_wins', 'z_projected_points']].fillna(0)
 
     # Calculate the weighted score
     merged_df['composite_score'] = (
+        merged_df['z_all_play_wins'] * weights['all_play_wins'] +
         merged_df['z_points'] * weights['points'] +
-        merged_df['z_wins'] * weights['wins'] +
         merged_df['z_projected_points'] * weights['projected_points']
     )
 
@@ -145,11 +147,11 @@ def get_power_rankings(season_df, record_df, projections_df, weights=None):
     # Sort by the power ranking score in descending order
     ranked_df = merged_df.sort_values(by='power_index', ascending=False).reset_index(drop=True)
     ranked_df['rank'] = range(1, len(ranked_df) + 1)
+    
+    return ranked_df[['rank', 'roster_id', 'power_index', 'z_points', 'z_all_play_wins', 'z_projected_points']].round(4)   
 
-    return ranked_df[['rank', 'owner_id', 'power_index', 'z_points', 'z_wins', 'z_projected_points']].round(4)   
 
-
-def calculate_trend_lines(season_df, record_df, projections_df, target_owner_name):   
+def calculate_trend_lines(season_df, projections_df, target_roster_id):   
     trend_data = []
     max_week = int(season_df['week'].max())
     
@@ -157,13 +159,13 @@ def calculate_trend_lines(season_df, record_df, projections_df, target_owner_nam
         matchups_slice = season_df[season_df['week'] <= wk]
         projections_slice = projections_df[projections_df['week'] <= wk]
         
-        aggs = calculate_season_aggregates(matchups_slice)
+        aggs_df = calculate_season_aggregates(matchups_slice)
         
         proj_aggs = projections_slice.groupby('roster_id')['projected_points'].sum().reset_index()
         
-        rankings = get_power_rankings(aggs, record_df, proj_aggs)
+        rankings = get_power_rankings(aggs_df, proj_aggs)
         
-        user_row = rankings[rankings['owner_id'] == target_owner_name]
+        user_row = rankings[rankings['roster_id'] == target_roster_id]
         
         if not user_row.empty:
             trend_data.append({

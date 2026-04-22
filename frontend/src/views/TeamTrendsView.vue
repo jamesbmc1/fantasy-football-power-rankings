@@ -22,7 +22,7 @@ const loadTrends = async () => {
   isLoading.value = true
   error.value = null
   try {
-    trendData.value = await fetchTeamTrends(leagueId, ownerName, week.value)
+    trendData.value = await fetchTeamTrends(leagueId.trim(), ownerName, week.value)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load trends'
   } finally {

@@ -1,9 +1,9 @@
 export interface RankedTeam {
     rank: number;
-    owner_id: string;
+    owner_name: string;
     power_index: number;
     z_points: number;
-    z_wins: number;
+    z_all_play_wins: number;
     z_projected_points: number;
 }
 

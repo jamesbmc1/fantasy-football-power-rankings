@@ -2,7 +2,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from src.api_clients.sleeper import SleeperAPIClient
-from src.utils.calculations import process_matchups_data, get_true_record, get_power_rankings, calculate_trend_lines, get_projections, calculate_season_aggregates
+from src.utils.calculations import create_rosters_map, create_users_map, process_matchups_data, get_true_record, get_power_rankings, calculate_trend_lines, get_projections, calculate_season_aggregates
 import asyncio
 import uvicorn
 from dotenv import load_dotenv
@@ -73,17 +73,20 @@ async def fetch_rankings(league_id: str, week: int):
     
     season_df = process_matchups_data(matchup_dfs, total_rosters)    
     aggs_df = calculate_season_aggregates(season_df)
-    
-    record_df = get_true_record(league_data["users"], rosters_data)
-    
+        
     current_matchups = matchups_up_to_week[-1]
     current_projections = projections_to_week[-1]
     projections_df = get_projections(league_data["league_info"], current_matchups, current_projections)
     
     # Generate the final rankings
-    ranked_df = get_power_rankings(aggs_df, record_df, projections_df)
+    ranked_df = get_power_rankings(aggs_df, projections_df)
     
-    # FIX: Return the final output to the frontend formatted as JSON
+    user_map = create_users_map(league_data["users"])
+    roster_map = create_rosters_map(rosters_data)
+    
+    ranked_df['owner_name'] = ranked_df['roster_id'].map(roster_map).map(user_map)
+    
+    # Return the final output to the frontend formatted as JSON
     return format_df_to_json(ranked_df)
 
 @app.get("/trends/{league_id}/{target_owner_name}/{week}")
@@ -104,6 +107,12 @@ async def fetch_team_trends(league_id: str, target_owner_name: str, week: int):
         df['week'] = wk_idx + 1 
         matchup_dfs.append(df)
         
+    user_map = create_users_map(league_data["users"])
+    roster_map = create_rosters_map(rosters_data)
+    
+    target_user_id = next((uid for uid, name in user_map.items() if name == target_owner_name), None)
+    target_roster_id = next((rid for rid, uid in roster_map.items() if uid == target_user_id), None)
+        
     season_df = process_matchups_data(matchup_dfs, total_rosters)    
     
     proj_dfs = []
@@ -113,16 +122,10 @@ async def fetch_team_trends(league_id: str, target_owner_name: str, week: int):
         proj_dfs.append(df)
         
     projections_df = pd.concat(proj_dfs, ignore_index=True)
-    
-    record_df = get_true_record(league_data["users"], rosters_data)
-    
-    trend_df = calculate_trend_lines(season_df, record_df, projections_df, target_owner_name)
+        
+    trend_df = calculate_trend_lines(season_df, projections_df, target_roster_id)
     
     return format_df_to_json(trend_df)
-    
-
+     
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
-    
-    
-    
+    uvicorn.run("src.app:app", host="0.0.0.0", port=8000, reload=True)
