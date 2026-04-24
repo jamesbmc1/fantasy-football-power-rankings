@@ -175,3 +175,63 @@ def calculate_trend_lines(season_df, projections_df, target_roster_id):
             })
             
     return pd.DataFrame(trend_data)
+
+def calculate_weekly_regular_standings(season_df):
+    """
+    Calculates cumulative H2H records (Wins, Losses, PF, PA)
+    from the data provided in season_df.
+    """
+
+    opponents = season_df[['week', 'matchup_id', 'roster_id', 'points']].copy()
+    opponents.columns = ['week', 'matchup_id', 'opponent_id', 'opponent_points']
+    
+    merged_df = season_df.merge(opponents, on=['week', 'matchup_id'])
+    merged_df = merged_df[merged_df['roster_id'] != merged_df['opponent_id']]
+    
+    merged_df['wins'] = merged_df['points'] > merged_df['opponent_points'].astype(int)
+    merged_df['losses'] = merged_df['points'] < merged_df['opponent_points'].astype(int)
+    merged_df['ties'] = merged_df['points'] == merged_df['opponent_points'].astype(int)
+    
+    standings = merged_df.groupby('roster_id').agg({
+        'wins': 'sum',
+        'losses': 'sum',
+        'ties': 'sum',
+        'points': 'sum',
+        'opponent_points': 'sum'
+    }).reset_index()
+    
+    standings['win_pct'] = round((standings['wins'] + (standings['ties'] * 0.5)) / (standings['wins'] + standings['losses'] + standings['ties']), 4)
+    
+    return standings.sort_values(by=['wins', 'points'], ascending=False)
+
+def calculate_all_wins_standings(season_df):
+    df = season_df[['roster_id', 'all_play_wins', 'all_play_losses']].copy()
+    standings = df.groupby('roster_id').agg({
+        'all_play_wins': 'sum',
+        'all_play_losses': 'sum'
+        
+    }).reset_index()
+    
+    standings['win_pct'] = round(standings['all_play_wins'] / (standings['all_play_wins'] + standings['all_play_losses']), 4)
+    return standings.sort_values(by=['all_play_wins', 'all_play_losses'], ascending=[False, True])
+
+def calculate_rival_standings(season_df, user_roster_id, rival_roster_id):
+    u_id = int(user_roster_id)
+    r_id = int(rival_roster_id)
+    
+    user_points = season_df[season_df['roster_id'] == u_id][['week', 'points']]
+    rival_target_points = season_df[season_df['roster_id'] == r_id][['week', 'points']]
+    
+    user_points.columns = ['week', 'points_user']
+    rival_target_points.columns = ['week', 'points_rival']
+    
+    merged_df = user_points.merge(rival_target_points, on='week')
+    
+    merged_df['wins'] = (merged_df['points_user'] > merged_df['points_rival']).astype(int)
+    merged_df['losses'] = (merged_df['points_user'] < merged_df['points_rival']).astype(int)
+    merged_df['ties'] = (merged_df['points_user'] == merged_df['points_rival']).astype(int)
+    
+    standings = merged_df[['wins', 'losses', 'ties', 'points_user', 'points_rival']].sum().to_frame().T
+    standings['roster_id'] = u_id
+    
+    return standings.reset_index(drop=True)

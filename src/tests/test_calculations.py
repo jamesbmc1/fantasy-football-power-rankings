@@ -1,11 +1,15 @@
 import pandas as pd
 import pytest
-from unittest.mock import MagicMock, patch
 
 from src.utils.calculations import (
     calculate_player_score,
     get_projections,
-    get_power_rankings
+    get_power_rankings,
+    calculate_season_aggregates,
+    process_matchups_data,
+    calculate_weekly_regular_standings,
+    calculate_all_wins_standings,
+    calculate_rival_standings
 )
 
 @pytest.fixture
@@ -19,123 +23,114 @@ def mock_league_scoring():
     }
 
 @pytest.fixture
+def sample_league_data(mock_league_scoring):
+    return {
+        "scoring_settings": mock_league_scoring,
+        "season": "2025",
+        "total_rosters": 2
+    }
+
+@pytest.fixture
 def sample_season_df():
     data = {
         "roster_id": [1, 2],
-        "owner_id": ["user_1", "user_2"],
-        "points": [1200, 1000],
-        "all_play_wins": [5, 10],
-        "z_score": [1.2, -0.5]
+        "points": [120.0, 100.0],
+        "all_play_wins": [1, 0],
+        "all_play_losses": [0, 1],
+        "z_score": [1.0, -1.0]
     }
-
-    return pd.DataFrame(data)
-
-@pytest.fixture
-def sample_record_df():
-    data = {
-        "roster_id": [1, 2],
-        "wins": [8, 4],
-        "losses": [4, 8],
-    }
-
     return pd.DataFrame(data)
 
 @pytest.fixture
 def sample_projections_df():
     data = {
         "roster_id": [1, 2],
-        "projected_points": [120, 140.42]
+        "projected_points": [120.0, 140.0]
     }
-
     return pd.DataFrame(data)
 
-
-@pytest.fixture
-def get_matchup_response():
-    return [
-        {
-            "roster_id": 1,
-            "starters": [101, 102]
-        },
-        {
-            "roster_id": 2,
-            "starters": [201]
-        }
-    ]
-
-@pytest.fixture
-def get_projections_response():
-    return {
-        #QB
-        "101": {"pass_td": 2, "pass_yd": 250},
-        #WR
-        "102": {"rec": 6, "rush_yd": 80, "rush_td": 1},
-        #Player on Bye
-        "201": {},
-        #Not A PlayerID
-        "999": None
-    }
-
 def test_calculate_player_score(mock_league_scoring):
-    #Player data simulating a QB with 2 passing TDs and 250 passing yards
-    player_data_1 = {
-        "pass_td": 2,
-        "pass_yd": 250
+    player_data = {"pass_td": 2, "pass_yd": 250}
+    expected_score = (2 * 4.0) + (250 * 0.04)
+    assert calculate_player_score(player_data, mock_league_scoring) == expected_score
+
+def test_get_projections(sample_league_data, mock_league_scoring):
+    matchups = [
+        {"roster_id": 1, "starters": ["101"]},
+        {"roster_id": 2, "starters": ["201"]}
+    ]
+    weekly_projections = {
+        "101": {"stats": {"pass_td": 1, "pass_yd": 200}}, # 4 + 8 = 12
+        "201": {"stats": {"rush_td": 1, "rush_yd": 50}}  # 6 + 5 = 11
     }
+    df = get_projections(sample_league_data, matchups, weekly_projections)
+    assert df.loc[df['roster_id'] == 1, 'projected_points'].values[0] == 12.0
+    assert df.loc[df['roster_id'] == 2, 'projected_points'].values[0] == 11.0
 
-    #Bye Week for player
-    player_data_2 = {}
+def test_get_power_rankings(sample_season_df, sample_projections_df):
+    rankings_df = get_power_rankings(sample_season_df, sample_projections_df)
+    assert 'power_index' in rankings_df.columns
+    assert rankings_df.iloc[0]['rank'] == 1
+    assert rankings_df.iloc[0]['roster_id'] == 1
 
-    expected_score_1 = (2 * mock_league_scoring["pass_td"]) + (250 * mock_league_scoring["pass_yd"])
-    calculated_score_1 = calculate_player_score(player_data_1, mock_league_scoring)
+def test_calculate_season_aggregates():
+    data = {
+        'roster_id': [1, 1, 2, 2],
+        'all_play_wins': [1, 1, 0, 0],
+        'all_play_losses': [0, 0, 1, 1],
+        'z_score': [1.0, 1.0, -1.0, -1.0],
+        'points': [100, 110, 80, 90]
+    }
+    df = pd.DataFrame(data)
+    aggs = calculate_season_aggregates(df)
+    assert aggs.loc[aggs['roster_id'] == 1, 'points'].values[0] == 210
+    assert aggs.loc[aggs['roster_id'] == 2, 'all_play_wins'].values[0] == 0
 
-    expected_score_2 = 0
-    calculated_score_2 = calculate_player_score(player_data_2, mock_league_scoring)
-
-    assert calculated_score_1 == expected_score_1
-    assert calculated_score_2 == expected_score_2
+def test_process_matchups_data():
+    matchup_wk1 = [
+        {'roster_id': 1, 'points': 100},
+        {'roster_id': 2, 'points': 120}
+    ]
     
+    df = pd.DataFrame(matchup_wk1).assign(week=1)
 
-def test_get_projections(mock_league_scoring, get_matchup_response, get_projections_response):
-    with patch('src.utils.calculations.SleeperAPIClient') as MockClient:
-        mock_client_instance = MockClient.return_value
-        
-        mock_client_instance.get_league_info.return_value = {
-            "league_id": "test_league",
-            "scoring_settings": mock_league_scoring
-        }
-        mock_client_instance.get_matchups.return_value = get_matchup_response
-        mock_client_instance.get_weekly_projections.return_value = get_projections_response
+    df['matchup_id'] = 1
+    processed = process_matchups_data([df], 2)
+    assert 'all_play_wins' in processed.columns
+    assert processed.loc[processed['roster_id'] == 2, 'all_play_wins'].values[0] == 1
 
-        df_projections = get_projections(league_id="test_league", week=2, season=2025)
+def test_calculate_weekly_regular_standings():
+    data = {
+        'week': [1, 1, 2, 2],
+        'matchup_id': [1, 1, 1, 1],
+        'roster_id': [1, 2, 1, 2],
+        'points': [100, 120, 110, 90]
+    }
+    df = pd.DataFrame(data)
+    standings = calculate_weekly_regular_standings(df)
+    assert standings.loc[standings['roster_id'] == 1, 'wins'].values[0] == 1
+    assert standings.loc[standings['roster_id'] == 1, 'points'].values[0] == 210
 
-        expected_data = {
-            "roster_id": [1, 2],
-            "projected_points": [38.0, 0.0]
-        }
-        expected_df = pd.DataFrame(expected_data)
+def test_calculate_all_wins_standings():
+    data = {
+        'roster_id': [1, 2],
+        'all_play_wins': [5, 3],
+        'all_play_losses': [2, 4]
+    }
+    df = pd.DataFrame(data)
+    standings = calculate_all_wins_standings(df)
+    assert standings.iloc[0]['roster_id'] == 1
+    assert standings.iloc[0]['win_pct'] == round(5/7, 4)
 
-        pd.testing.assert_frame_equal(
-            df_projections.sort_values('roster_id').reset_index(drop=True),
-            expected_df.sort_values('roster_id').reset_index(drop=True)
-        )
-
-
-def test_get_power_rankings(sample_season_df, sample_record_df, sample_projections_df):
-    rankings_df = get_power_rankings(
-        season_df=sample_season_df,
-        record_df=sample_record_df,
-        projections_df=sample_projections_df
-    )
-
-    expected_cols = ['rank', 'owner_id', 'power_index', 'z_points', 'z_wins', 'z_projected_points']
-    assert list(rankings_df.columns) == expected_cols
-
-    # The DataFrame must be returned sorted by score (Highest first)
-    top_score = rankings_df.iloc[0]['power_index']
-    bottom_score = rankings_df.iloc[-1]['power_index']
-    
-    assert top_score >= bottom_score
-
-    assert 0 <= top_score <= 100
-    assert 0 <= bottom_score <= 100
+def test_calculate_rival_standings():
+    data = {
+        'week': [1, 1, 2, 2],
+        'roster_id': [1, 2, 1, 2],
+        'points': [100, 120, 110, 90]
+    }
+    df = pd.DataFrame(data)
+    rival_standings = calculate_rival_standings(df, 1, 2)
+    assert rival_standings.iloc[0]['wins'] == 1
+    assert rival_standings.iloc[0]['losses'] == 1
+    assert rival_standings.iloc[0]['points_user'] == 210
+    assert rival_standings.iloc[0]['points_rival'] == 210

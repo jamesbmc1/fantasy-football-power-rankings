@@ -27,14 +27,24 @@ const isActive = (path: string) => route.path === path
         </div>
 
         <div class="hidden md:flex items-center space-x-1">
-          <RouterLink 
-            to="/" 
-            class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
-            :class="isActive('/') ? 'bg-slate-800 text-emerald-400' : 'text-slate-300 hover:bg-slate-800 hover:text-white'"
-          >
-            <LayoutDashboard class="w-4 h-4" />
-            Dashboard
-          </RouterLink>
+            <RouterLink 
+              to="/" 
+              class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+              :class="isActive('/') ? 'bg-slate-800 text-emerald-400' : 'text-slate-300 hover:bg-slate-800 hover:text-white'"
+            >
+              <LayoutDashboard class="w-4 h-4" />
+              Dashboard
+            </RouterLink>
+          
+
+            <RouterLink 
+              to="/standings" 
+              class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+              :class="isActive('/standings') ? 'bg-slate-800 text-emerald-400' : 'text-slate-300 hover:bg-slate-800 hover:text-white'"
+            >
+              <LayoutDashboard class="w-4 h-4" />
+              Standings
+            </RouterLink>
         </div>
 
         <div class="flex items-center md:hidden">
@@ -59,6 +69,16 @@ const isActive = (path: string) => route.path === path
         >
           <LayoutDashboard class="w-5 h-5" />
           Dashboard
+        </RouterLink>
+
+        <RouterLink 
+          to="/standings" 
+          @click="isMobileMenuOpen = false"
+          class="flex items-center gap-3 px-3 py-2 rounded-md text-base font-medium"
+          :class="isActive('/standings') ? 'bg-slate-800 text-emerald-400' : 'text-slate-300 hover:bg-slate-800 hover:text-white'"
+        >
+          <BarChart2 class="w-5 h-5" />
+          Standings
         </RouterLink>
       </div>
     </div>
