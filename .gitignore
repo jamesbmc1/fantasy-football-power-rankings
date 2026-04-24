@@ -4,6 +4,8 @@ data/
 
 # Ignore virtual environments
 venv/
+.venv/
+.venv
 .env
 
 # Ignore Python Cache & Testing Junk
