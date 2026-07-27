@@ -70,8 +70,8 @@ You can access the live deployment to analyze your own Sleeper league performanc
 #### 1. Retrieve Your League ID
 Navigate to your league on Sleeper.com. Your League ID is the long string of numbers found in the URL.
 
-- **Example URL:** https://sleeper.com/leagues/1332124519619371008/matchup
-- **League ID:** 1332124519619371008
+- **Example URL:** https://sleeper.com/leagues/1257463999449018368/matchup
+- **League ID:** 1257463999449018368
 
 
 #### 2. Access the Application: 
