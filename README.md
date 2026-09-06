@@ -50,7 +50,7 @@ Final rankings are derived from three key pillars (configurable in `calculations
 3.  **T-Score Transformation:** The weighted composite Z-score is transformed into the Power Index:
     $$Power Index = 50 + (Composite Z-Score \times 10)$$
     *Scores are clipped between 0 and 100.*
-
+    
 ---
 
 ## 📖 League Guide
