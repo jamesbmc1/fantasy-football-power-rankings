@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ArrowLeft } from 'lucide-vue-next'
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchTeamTrends } from '../api/sleeperApi'
@@ -12,7 +13,7 @@ const leagueId = route.params.leagueId as string
 const ownerName = route.params.ownerName as string
 
 // State
-const week = ref(5)
+const week = ref(1)
 const trendData = ref<TrendData[]>([])
 const isLoading = ref(true)
 const error = ref<string | null>(null)

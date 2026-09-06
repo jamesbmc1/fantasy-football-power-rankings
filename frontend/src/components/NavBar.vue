@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { Trophy, LayoutDashboard, Menu, X } from 'lucide-vue-next'
+import { Trophy, LayoutDashboard, Menu, X, BarChart2 } from 'lucide-vue-next'
 
 const isMobileMenuOpen = ref(false)
 const route = useRoute()
@@ -42,7 +42,7 @@ const isActive = (path: string) => route.path === path
               class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
               :class="isActive('/standings') ? 'bg-slate-800 text-emerald-400' : 'text-slate-300 hover:bg-slate-800 hover:text-white'"
             >
-              <LayoutDashboard class="w-4 h-4" />
+              <BarChart2 class="w-4 h-4" />
               Standings
             </RouterLink>
         </div>

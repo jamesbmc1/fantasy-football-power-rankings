@@ -2,99 +2,83 @@
 
 ## Project Overview
 
-This platform is a full-stack data analytics application designed to provide objective, statistically normalized power rankings for fantasy football leagues. By integrating directly with the Sleeper API, the system bypasses the limitations of standard win-loss records—which are often skewed by schedule luck—and provides a "Power Index" based on scoring consistency, all-play records, and roster strength.
+This platform is a full-stack data analytics application designed to provide objective, statistically normalized power rankings for fantasy football leagues. By integrating directly with the Sleeper API, the system bypasses the limitations of standard win-loss records—which are often skewed by schedule luck—and provides a **"Power Index"** based on scoring consistency, all-play records, and roster strength.
 
-The architecture follows a cloud-native approach, utilizing a FastAPI backend for asynchronous data orchestration and a Pandas-driven statistical engine to calculate performance metrics.
+The application allows league managers to identify the "true" best teams by stripping away the noise of head-to-head scheduling.
 
 ---
 
-## Technical Architecture
+## 🚀 Key Features
 
-The project is divided into three primary layers:
+- **Power Rankings Dashboard:** A comprehensive leaderboard ranking teams by their Power Index, featuring Z-Score breakdowns for points and all-play performance.
+- **Season Trends:** Interactive ApexCharts visualizations showing a team's Power Index and League Rank progression over the season.
+- **League Standings & All-Play:** Detailed tables for regular H2H standings and "All-Play" records (your record if you played every team every week).
+- **Rivalry Simulator:** A head-to-head comparison tool that simulates a matchup between two managers for every week of the season to determine who is statistically superior.
 
-#### 1. Backend Orchestration (FastAPI)
+---
 
-The backend serves as a high-performance middleware that manages the complex lifecycle of league data retrieval.
+## 🛠 Technical Architecture
 
-- **Asynchronous Data Fetching:** Utilizes asyncio.gather and httpx to concurrently fetch up to 17 weeks of matchup and projection data. This reduces total request latency by processing external API calls in parallel rather than sequentially.
+The project is a modern full-stack application:
 
-- **Traffic Control:** Implements an asyncio.Semaphore to throttle concurrent requests to external services, ensuring the application remains stable and avoids rate-limiting under high load.
+#### Backend: FastAPI & Pandas
+- **FastAPI:** Asynchronous Python backend managing data orchestration.
+- **Pandas Engine:** Processes raw Sleeper JSON data into a statistical pipeline.
+- **Asynchronous Data Fetching:** Uses `asyncio.gather` and `httpx` to concurrently fetch matchup and projection data, managed by a semaphore to respect API rate limits.
 
-- **CORS Middleware:** Configured to secure communication between the Render-hosted Python backend and the Vercel-hosted frontend.
+#### Frontend: Vue 3 & TypeScript
+- **Framework:** Vue 3 with the Composition API and Vite.
+- **Styling:** Tailwind CSS for a responsive, dark-themed UI.
+- **Visualizations:** ApexCharts for rendering season performance trends.
+- **Type Safety:** Full TypeScript integration ensuring data integrity between the API and the UI.
 
+---
 
-#### 2. Statistical Logic Engine (Pandas)
+## 🧪 Statistical Methodology: The Power Index
 
-The core of the application is a data science pipeline that transforms raw JSON responses into a normalized Power Index.
+The **Power Index** is the platform's core metric, defined mathematically as a T-Score (Mean=50, StdDev=10).
 
-- **Z-Score Normalization:** To account for weekly scoring volatility, the engine calculates the Z-score for every team on a per-week basis. This identifies how many standard deviations a team is from the league mean, ensuring a "high-scoring week" across the league is weighted fairly against "low-scoring defensive weeks."
+#### 1. Weighted Composite Formula
+Final rankings are derived from three key pillars (configurable in `calculations.py`):
+- **Scoring Consistency (45%):** Measured via season-long Z-Scores of total points.
+- **All-Play Record (40%):** Calculated by ranking scores within each week to determine a theoretical record against the entire league.
+- **Roster Projections (15%):** Incorporates predictive data based on current starters and league scoring settings.
 
-- **All-Play Record Calculation:** The system ranks every team's score within each week to determine their "All-Play" record—the theoretical record if a team had played every other manager in the league that week.
+#### 2. Calculation Process
+1.  **Weekly Normalization:** Weekly points are converted to Z-scores using the league's mean and standard deviation for that specific week.
+2.  **Aggregation:** Weekly Z-scores, total points, and all-play wins are summed to create a season-long profile.
+3.  **T-Score Transformation:** The weighted composite Z-score is transformed into the Power Index:
+    $$Power Index = 50 + (Composite Z-Score \times 10)$$
+    *Scores are clipped between 0 and 100.*
 
-- **Weighted Composite Formula:** Final rankings are derived from a weighted average of three key pillars:
+---
 
-- Season-Long Points (50%): Measures raw scoring output.
+## 📖 League Guide
+For a non-technical explanation of how these rankings work, please refer to the **[Manager's Guide (LEAGUE_GUIDE.md)](./LEAGUE_GUIDE.md)**.
 
-- Actual Wins (30%): Acknowledges head-to-head success.
+---
 
-- Roster Projections (20%): Incorporates predictive data based on current starters and league scoring settings.
+## 🚦 Getting Started
 
+### Local Development
 
-#### 3. Frontend Integration (TypeScript)
+#### Backend
+1. Navigate to the root directory.
+2. Create a virtual environment: `python -m venv venv`
+3. Install dependencies: `pip install -r requirements.txt`
+4. Run the server: `python src/app.py` (Starts at `http://localhost:8000`)
 
-The client-side application consumes the API via a typed interface.
+#### Frontend
+1. Navigate to `/frontend`.
+2. Install dependencies: `npm install`
+3. Run the dev server: `npm run dev` (Starts at `http://localhost:5173`)
 
-- **Type Safety:** Utilizes TypeScript interfaces to ensure data integrity between the Python backend's dictionary structures and the frontend's state management.
+### Environment Variables
+The frontend requires a `VITE_API_BASE_URL` if pointing to a production backend. Locally, it defaults to `http://localhost:8000`.
 
-- **Environment-Aware:** Configured with dynamic base URLs to switch seamlessly between development and production environments.
+---
 
-
-## Statistical Methodology: The Power Index
-
-The final output of the platform is the **Power Index**, which is mathematically defined as a T-Score.
-
-#### Calculation Process
-
-1. **Weekly Normalization:** Weekly points are converted to Z-scores using the league's mean and standard deviation for that specific week.
-2. **Aggregation:** Weekly Z-scores, total points, and wins are summed to create a season-long profile.
-3. **Composite Z-Score:** The weighted composite Z-score is transformed into a T-score using the formula:
-
-$$Power Index = 50 + (Composite Z-Score \times 10)$$
-
-This results in a distribution where 50 represents the league average. A score of 60 indicates a team is one standard deviation above average, while a 40 indicates one standard deviation below.
-
-
-## How to Use the Platform
-You can access the live deployment to analyze your own Sleeper league performance.
-
-#### 1. Retrieve Your League ID
-Navigate to your league on Sleeper.com. Your League ID is the long string of numbers found in the URL.
-
-- **Example URL:** https://sleeper.com/leagues/1332124519619371008/matchup
-- **League ID:** 1332124519619371008
-
-
-#### 2. Access the Application: 
-Navigate to the live site: https://fantasy-football-power-rankings-black.vercel.app/
-
-> **Note**: Because the backend is hosted on Render's free tier, the server may need 30-60 seconds to "wake up" during the initial data load. Subsequent requests will be significantly faster.
-
-
-#### 3. Analyze League Rankings
-Once the data loads, the dashboard displays a comprehensive leaderboard.
-
-**1. Power Index (The Big Picture)**
-The **Power Index** is your team's "Overall Rating." It combines scoring, winning, and future potential into a single number.
-
-- **Centered at 50:** A score of 50.00 represents a perfectly average team.
-- **The Scale:** Most teams will fall between 30 and 70.
-- **What it reveals:** It identifies who the "true" best teams are by stripping away schedule luck. A team with a mediocre record but a high Power Index is statistically a powerhouse that has simply been unlucky.
-
-#### 4. Explore Individual Trends
-Click on any **Manager's Name** in the table to view their Season Trends. This provides a week-by-week visualization of their Power Index and League Rank, allowing you to track momentum and statistical consistency throughout the season.
-
-## Environment and Deployment
-- **Runtime:** Python 3.11.4
-- **Backend Infrastructure:** Render (Web Service)
-- **Frontend Infrastructure:** Vercel
-- **API Client:** Custom asynchronous Sleeper API wrapper
+## 🌐 Deployment
+- **Backend:** Hosted on Render (FastAPI).
+- **Frontend:** Hosted on Vercel (Vue/Vite).
+- **Live Site:** [fantasy-football-power-rankings-black.vercel.app](https://fantasy-football-power-rankings-black.vercel.app/)
