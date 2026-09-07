@@ -30,3 +30,5 @@ class SleeperAPIClient:
     async def get_weekly_projections(self, season: str, week: int):
         # Projections use the sport-specific endpoint
         return await self._fetch(f"projections/nfl/{season}/{week}")
+    async def get_nfl_state(self):
+        return await self._fetch('state/nfl')
