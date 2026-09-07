@@ -1,159 +1,43 @@
 <script setup lang="ts">
-import { ArrowLeft } from 'lucide-vue-next'
-import { ref, onMounted, computed, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { fetchTeamTrends } from '../api/sleeperApi'
-import type { TrendData } from '../types'
-
+import { computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { useAnalytics } from '../composables/useAnalytics'
+import { useLeague } from '../composables/useLeague'
+import MetricChart from '../components/MetricChart.vue'
+import AnalyticsNotice from '../components/AnalyticsNotice.vue'
 const route = useRoute()
-const router = useRouter()
-
-// 1. Grab variables (Ensure these match your router/index.ts path exactly!)
-const leagueId = route.params.leagueId as string
-const ownerName = route.params.ownerName as string
-
-// State
-const week = ref(1)
-const trendData = ref<TrendData[]>([])
-const isLoading = ref(true)
-const error = ref<string | null>(null)
-
-// 2. Extract the fetch logic into a reusable function
-const loadTrends = async () => {
-  isLoading.value = true
-  error.value = null
-  try {
-    trendData.value = await fetchTeamTrends(leagueId.trim(), ownerName, week.value)
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to load trends'
-  } finally {
-    isLoading.value = false
-  }
-}
-
-// 3. Run it once when the page first loads
-onMounted(() => {
-  loadTrends()
-})
-
-// 4. Automatically run it again whenever the 'week' dropdown changes
-watch(week, () => {
-  loadTrends()
-})
-
-const chartOptions = computed(() => ({
-  chart: {
-    background: 'transparent',
-    toolbar: { show: false },
-    fontFamily: 'inherit'
-  },
-  theme: { mode: 'dark' },
-  // Emerald for Power Index, Sky Blue for Rank
-  colors: ['#34d399', '#38bdf8'], 
-  stroke: {
-    curve: 'smooth',
-    width: [4, 3],
-    dashArray: [0, 6], // Solid line for Power Index, Dashed line for Rank to tell them apart
-    dropShadow: { enabled: true, top: 4, left: 0, blur: 4, opacity: 0.1 }
-  },
-  xaxis: {
-    categories: trendData.value.map(d => `Week ${d.week}`),
-    labels: { style: { colors: '#94a3b8' } },
-    axisBorder: { show: false },
-    axisTicks: { show: false }
-  },
-  // We change yaxis to an array so we can have two different scales!
-  yaxis: [
-    {
-      seriesName: 'Power Index',
-      labels: { style: { colors: '#34d399' } },
-      title: { text: 'Power Index', style: { color: '#34d399', fontWeight: 600 } },
-    },
-    {
-      seriesName: 'Rank',
-      opposite: true, // This puts the Rank numbers on the RIGHT side of the screen
-      reversed: true, // This flips the axis so Rank #1 is at the top!
-      labels: { 
-        style: { colors: '#38bdf8' },
-        formatter: (value: number) => Math.round(value).toString() // Keeps ranks as whole numbers
-      },
-      title: { text: 'League Rank', style: { color: '#38bdf8', fontWeight: 600 } },
-    }
-  ],
-  grid: {
-    borderColor: '#334155',
-    strokeDashArray: 4,
-    xaxis: { lines: { show: true } }
-  },
-  tooltip: { theme: 'dark' },
-  legend: {
-    position: 'top',
-    labels: { colors: '#f8fafc' }
-  }
-}))
-
-const chartSeries = computed(() => [
-  {
-    name: 'Power Index',
-    type: 'line',
-    data: trendData.value.map(d => Number(d.power_index.toFixed(2)))
-  },
-  {
-    name: 'Rank',
-    type: 'line',
-    data: trendData.value.map(d => d.rank)
-  }
-])
+const { leagueId, refreshKey } = useLeague()
+const { analytics, isLoading, error } = useAnalytics()
+watch(() => route.params.leagueId, id => { if (/^\d+$/.test(String(id))) leagueId.value = String(id) }, { immediate: true })
+const candidates = computed(() => analytics.value?.rankings.filter(t => route.params.rosterId ? t.roster_id === Number(route.params.rosterId) : t.owner_name === route.params.ownerName) || [])
+const team = computed(() => candidates.value.length === 1 ? candidates.value[0] : undefined)
+const history = computed(() => analytics.value?.history.filter(t => t.roster_id === team.value?.roster_id) || [])
+const current = computed(() => history.value[history.value.length - 1])
+const categories = computed(() => history.value.map(t => `W${t.week}`))
+const contributions = computed(() => team.value ? [
+  { name: 'Scoring production · 45%', value: team.value.scoring_contribution },
+  { name: 'All-play performance · 40%', value: team.value.all_play_contribution },
+  { name: `Starter projections · 15%${team.value.projections_available ? '' : ' · unavailable'}`, value: team.value.projection_contribution },
+] : [])
+const movement = computed(() => { const c = team.value?.rank_change; return c == null ? 'No comparable previous ranking' : c > 0 ? `↑ ${c} places from last week` : c < 0 ? `↓ ${Math.abs(c)} places from last week` : 'No change from last week' })
+const signed = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(2)}`
 </script>
-
 <template>
   <div class="space-y-6">
-
-    <div class="flex items-center justify-between">
-      <button 
-        @click="router.push('/')"
-        class="flex items-center gap-2 text-slate-400 hover:text-emerald-400 transition-colors font-medium bg-slate-800 px-4 py-2 rounded-lg border border-slate-700 hover:border-emerald-500/50"
-      >
-        <ArrowLeft class="w-5 h-5" />
-        Back to Dashboard
-      </button>
-    </div>
-
-    <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-sm flex items-center justify-between">
-      <div>
-        <h1 class="text-3xl font-extrabold text-white">
-          {{ ownerName }}'s <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">Season Trends</span>
-        </h1>
-        <p class="text-slate-400 mt-1">League ID: {{ leagueId }}</p>
-      </div>
-      
-      <div class="hidden sm:block">
-        <label for="week-select" class="text-slate-400 font-medium mr-3">Data up to Week</label>
-        <select
-            id="week-select" 
-            v-model="week"class="bg-slate-900 border border-slate-600 text-white text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 p-2.5 outline-none"
-            >
-            <option v-for="w in 17" :key="w" :value="w">{{ w }}</option>
-        </select>
-      </div>
-    </div>
-
-    <div v-if="isLoading" class="flex justify-center items-center h-96 bg-slate-800 rounded-xl border border-slate-700">
-      <div class="text-emerald-400 font-medium animate-pulse">Rendering analytics...</div>
-    </div>
-
-    <div v-else-if="error" class="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-xl">
-      {{ error }}
-    </div>
-
-    <div v-else class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl h-[500px]">
-      <apexchart 
-        type="line" 
-        height="100%" 
-        :options="chartOptions" 
-        :series="chartSeries"
-      ></apexchart>
-    </div>
-
+    <RouterLink to="/" class="back-link">← Back to rankings</RouterLink>
+    <div v-if="isLoading" class="empty-state" role="status"><h2>Loading team analysis…</h2></div>
+    <div v-else-if="error" class="empty-state" role="alert"><p>{{ error }}</p><button class="button-primary" @click="refreshKey++">Try again</button></div>
+    <template v-else>
+      <AnalyticsNotice />
+      <div v-if="!team || !current" class="empty-state"><h2>{{ candidates.length > 1 ? 'This manager name matches multiple teams.' : 'No team history available.' }}</h2><p>Open a manager from the rankings table to select their roster, or choose a completed week.</p></div>
+      <template v-else>
+        <header class="page-heading"><div><p class="eyebrow">THE STORY BEHIND THE RANK</p><h1>{{ team.owner_name }}</h1><p class="page-description">Cumulative rankings and weekly scoring through week {{ analytics?.through_week }}.</p></div></header>
+        <section class="team-summary"><article class="summary-card"><p class="eyebrow">LEAGUE RANK</p><h2>#{{ team.rank }}</h2><p>{{ movement }}</p></article><article class="summary-card"><p class="eyebrow">POWER INDEX</p><h2>{{ team.power_index.toFixed(2) }}</h2><p>Relative to this league</p></article><article class="summary-card"><p class="eyebrow">H2H RECORD</p><h2>{{ current.wins }}–{{ current.losses }}–{{ current.ties }}</h2><p>Actual opponent results · W–L–T</p></article><article class="summary-card"><p class="eyebrow">EXPECTED WINS</p><h2>{{ current.expected_wins.toFixed(2) }}</h2><p>{{ signed(current.schedule_advantage) }} schedule advantage</p><p>Based on scores, not a forecast</p></article></section>
+        <section class="ranking-panel"><div class="panel-heading"><div><h2>Season trajectory</h2><p>Two aligned charts: rating strength above, league position below. Rank 1 is at the top.</p></div></div><MetricChart :categories="categories" :series="[{ name: 'Power Index', data: history.map(t => t.power_index) }]" :min="0" :max="100" label="Cumulative Power Index by included week" /><MetricChart :categories="categories" :series="[{ name: 'League rank', data: history.map(t => t.rank) }]" reversed integer :min="1" :max="Math.max(2, analytics?.rankings.length || 2)" :colors="['#b2b2bc']" label="Cumulative league rank by included week, rank one at the top" /><p class="table-note">Reconstructed using currently available scores and projections; later corrections can revise history. Data notes identify weeks with unavailable projections.</p></section>
+        <section class="ranking-panel"><div class="panel-heading"><div><h2>Scoring by week</h2><p>Your weekly score versus the average team score in that same week.</p></div></div><MetricChart :categories="categories" :series="[{ name: team.owner_name, data: history.map(t => t.points) }, { name: 'League average', data: history.map(t => t.league_average) }]" :min="Math.min(0, ...history.map(t => t.points), ...history.map(t => t.league_average))" label="Team weekly points compared with weekly league average" /></section>
+        <section class="ranking-panel"><div class="panel-heading"><div><h2>What makes up this rating?</h2><p>Each contribution is measured in Power Index points, added to a baseline of 50.</p></div></div><div class="contribution-list"><div v-for="part in contributions" :key="part.name"><span>{{ part.name }}</span><strong :class="{ positive: part.value > 0, negative: part.value < 0 }">{{ signed(part.value) }}</strong></div><div class="contribution-total"><span>50 + contributions, capped at 0–100</span><strong>{{ team.power_index.toFixed(2) }}</strong></div></div><p class="table-note">{{ team.projections_available ? 'Projection data is available for every occupied starter this week.' : 'Complete starter projections are unavailable. Every team receives a neutral projection contribution; the remaining weights are unchanged.' }} Displayed contributions may differ from the total by a rounding cent.</p></section>
+        <details class="ranking-panel chart-data"><summary>View exact weekly history</summary><div class="table-scroll"><table class="power-table"><thead><tr><th>Week</th><th>Rank</th><th>Index</th><th>Your points</th><th>League average</th><th>Projection data</th></tr></thead><tbody><tr v-for="row in history" :key="row.week"><td>{{ row.week }}</td><td>{{ row.rank }}</td><td>{{ row.power_index.toFixed(2) }}</td><td>{{ row.points.toFixed(2) }}</td><td>{{ row.league_average.toFixed(2) }}</td><td>{{ row.projections_available ? 'Available' : 'Unavailable' }}</td></tr></tbody></table></div></details>
+      </template>
+    </template>
   </div>
 </template>

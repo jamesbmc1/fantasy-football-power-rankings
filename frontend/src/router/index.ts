@@ -7,6 +7,7 @@ import StandingsView from '../views/StandingsView.vue'
 const router = createRouter({
     history: createWebHistory(import.meta.env.BASE_URL),
     routes: [
+        { path: '/teams/:leagueId/:rosterId', name: 'team-detail', component: TeamTrendsView },
         {
             path: '/',
             name: 'dashboard',
