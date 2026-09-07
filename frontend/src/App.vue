@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router'
-import NavBar from './components/NavBar.vue';
+import NavBar from './components/NavBar.vue'
+import LeagueSelector from './components/LeagueSelector.vue'
 </script>
-
 <template>
-  <div class="min-h-screen bg-slate-900 text-slate-100 p-8 font-sans">
-
-    <NavBar />
-
-    <div class="max-w-6xl mx-auto">
-      <RouterView />
-    </div>
-  </div>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <NavBar />
+  <main id="main-content" class="app-main">
+    <LeagueSelector />
+    <RouterView />
+    <footer class="app-footer"><span>Fantasy Power Rankings</span><span>League-relative analysis · Powered by Sleeper data</span></footer>
+  </main>
 </template>
