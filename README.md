@@ -1,84 +1,87 @@
 # Sleeper Fantasy Football Power Rankings
 
-## Project Overview
+A Vue and FastAPI application for exploring a Sleeper league beyond its win–loss records. The Power Index combines cumulative scoring production, all-play results, and available starter projections. It is a league-relative rating under chosen weights, not a validated forecast or proof of the strongest roster.
 
-This platform is a full-stack data analytics application designed to provide objective, statistically normalized power rankings for fantasy football leagues. By integrating directly with the Sleeper API, the system bypasses the limitations of standard win-loss records—which are often skewed by schedule luck—and provides a **"Power Index"** based on scoring consistency, all-play records, and roster strength.
+## Features
 
-The application allows league managers to identify the "true" best teams by stripping away the noise of head-to-head scheduling.
+- Black/charcoal dashboard with manager search, summary cards, component Z-scores, and weekly rank changes. Tied leaders and tied biggest movers are included.
+- Shared league ID and week across pages, remembered in browser storage. Load league refreshes; Forget clears the selection.
+- Actual versus expected H2H wins with a zero-centered schedule-advantage chart.
+- Team detail with aligned Power Index/rank trajectories, weekly scoring versus league average, and additive rating contributions.
+- Week in review: a single-week scoring chart with a manager highlight and exact-data table.
+- H2H and all-play standings, plus an every-week rivalry comparison that updates when a different manager is selected.
 
----
+See [LEAGUE_GUIDE.md](LEAGUE_GUIDE.md) for the shareable explanation and [IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md) for the changes from the original project.
 
-## 🚀 Key Features
+## Architecture
 
-- **Power Rankings Dashboard:** A comprehensive leaderboard ranking teams by their Power Index, featuring Z-Score breakdowns for points and all-play performance.
-- **Season Trends:** Interactive ApexCharts visualizations showing a team's Power Index and League Rank progression over the season.
-- **League Standings & All-Play:** Detailed tables for regular H2H standings and "All-Play" records (your record if you played every team every week).
-- **Rivalry Simulator:** A head-to-head comparison tool that simulates a matchup between two managers for every week of the season to determine who is statistically superior.
+`Sleeper API → client → analytics service → FastAPI → shared Vue state → views/charts`
 
----
+- `src/api_clients/sleeper.py`: asynchronous HTTP requests with a concurrency limit, including NFL state.
+- `src/utils/calculations.py`: score normalization, standings, all-play, Power Index, and expected-win math.
+- `src/services/analytics.py`: validates complete weeks, applies the regular-season cutoff, handles optional projections, and builds one consistent league snapshot.
+- `src/app.py`: `/analytics/{league_id}/{week}` plus compatible rankings, trends, and standings routes backed by the same service.
+- `frontend/src/composables`: remembered league context and shared analytics loading/error/data state. The asynchronous state helper is tested independently.
+- Vue views use the snapshot for every table and chart. New roster-ID team links avoid ambiguous display names; old name-based trend links remain supported when unambiguous.
 
-## 🛠 Technical Architecture
+Navigation reuses the snapshot. Changing league/week or pressing Load league fetches a new one. There is no database, login, cross-device preference sync, or archival snapshot storage.
 
-The project is a modern full-stack application:
+## Math and data scope
 
-#### Backend: FastAPI & Pandas
-- **FastAPI:** Asynchronous Python backend managing data orchestration.
-- **Pandas Engine:** Processes raw Sleeper JSON data into a statistical pipeline.
-- **Asynchronous Data Fetching:** Uses `asyncio.gather` and `httpx` to concurrently fetch matchup and projection data, managed by a semaphore to respect API rate limits.
+For each team, standardize cumulative points, tie-adjusted cumulative all-play wins, and the selected included week's starter projections across the league (sample standard deviation). A constant component has Z-score zero.
 
-#### Frontend: Vue 3 & TypeScript
-- **Framework:** Vue 3 with the Composition API and Vite.
-- **Styling:** Tailwind CSS for a responsive, dark-themed UI.
-- **Visualizations:** ApexCharts for rendering season performance trends.
-- **Type Safety:** Full TypeScript integration ensuring data integrity between the API and the UI.
+`Power Index = clip(50 + 10 × (0.45 × scoring Z + 0.40 × all-play Z + 0.15 × projection Z), 0, 100)`
 
----
+The weighted composite is not re-standardized, so the resulting index does not necessarily have standard deviation 10. Clipping can also shift its mean. Weekly scoring Z-scores are available internally but are not the index's scoring component. Equal index values at four-decimal precision share a competition rank, e.g. 1, 1, 3.
 
-## 🧪 Statistical Methodology: The Power Index
+For each played H2H week:
 
-The **Power Index** is the platform's core metric, defined mathematically as a T-Score (Mean=50, StdDev=10).
+`Expected wins = (all-play wins + 0.5 × all-play ties) / number of other teams`
 
-#### 1. Weighted Composite Formula
-Final rankings are derived from three key pillars (configurable in `calculations.py`):
-- **Scoring Consistency (45%):** Measured via season-long Z-Scores of total points.
-- **All-Play Record (40%):** Calculated by ranking scores within each week to determine a theoretical record against the entire league.
-- **Roster Projections (15%):** Incorporates predictive data based on current starters and league scoring settings.
+Sum those fractions; subtract them from actual wins plus half the actual ties to obtain schedule advantage. Byes and median bonus games contribute to neither side. In a fully paired league, expected-win totals and actual win equivalents both equal half the number of team-games.
 
-#### 2. Calculation Process
-1.  **Weekly Normalization:** Weekly points are converted to Z-scores using the league's mean and standard deviation for that specific week.
-2.  **Aggregation:** Weekly Z-scores, total points, and all-play wins are summed to create a season-long profile.
-3.  **T-Score Transformation:** The weighted composite Z-score is transformed into the Power Index:
-    $$Power Index = 50 + (Composite Z-Score \times 10)$$
-    *Scores are clipped between 0 and 100.*
+Only completed NFL regular-season weeks are included, from the league's configured start week to before fantasy playoffs. The current NFL week is excluded until Sleeper advances to the next week. This can lag Monday night results. An incomplete week stops the analysis instead of dropping teams. Commissioner score overrides, including zero, are respected.
 
----
+If complete starter projections are unavailable for any team, the projection component is neutral for every team that week; the 45% and 40% weights remain unchanged. Movement is suppressed when projection availability changes. Data notes explain this in the UI. History is reconstructed from currently available data and can change after corrections.
 
-## 📖 League Guide
-For a non-technical explanation of how these rankings work, please refer to the **[Manager's Guide (LEAGUE_GUIDE.md)](./LEAGUE_GUIDE.md)**.
+## Run locally
 
----
+See [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md) for the full setup. From the project root:
 
-## 🚦 Getting Started
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m uvicorn src.app:app --reload --port 8000
+```
 
-### Local Development
+In another terminal:
 
-#### Backend
-1. Navigate to the root directory.
-2. Create a virtual environment: `python -m venv venv`
-3. Install dependencies: `pip install -r requirements.txt`
-4. Run the server: `python src/app.py` (Starts at `http://localhost:8000`)
+```sh
+cd frontend
+npm ci
+npm run dev
+```
 
-#### Frontend
-1. Navigate to `/frontend`.
-2. Install dependencies: `npm install`
-3. Run the dev server: `npm run dev` (Starts at `http://localhost:5173`)
+The frontend defaults to `http://localhost:8000`; `VITE_API_BASE_URL` overrides it. Open `http://localhost:5173` for the site and `http://localhost:8000/docs` for API documentation.
 
-### Environment Variables
-The frontend requires a `VITE_API_BASE_URL` if pointing to a production backend. Locally, it defaults to `http://localhost:8000`.
+## Validation
 
----
+```sh
+# Project root, with the virtual environment activated
+python -m pip install pytest trio
+python -m pytest src/tests -v
 
-## 🌐 Deployment
-- **Backend:** Hosted on Render (FastAPI).
-- **Frontend:** Hosted on Vercel (Vue/Vite).
-- **Live Site:** [fantasy-football-power-rankings-black.vercel.app](https://fantasy-football-power-rankings-black.vercel.app/)
+# Frontend
+cd frontend
+npm test
+npm run build
+```
+
+Backend tests cover independent numerical examples, ties, fractional scores, byes, overrides, expected-win conservation, history agreement, missing projections, season cutoffs, input validation, and legacy endpoint agreement. Frontend tests cover persistence, shared selections, blocked storage, stale responses, forgetting, and retries. Mocked tests do not establish live Sleeper availability.
+
+## Deployment
+
+The existing setup uses Render for FastAPI and Vercel for Vue/Vite. Deploy the backend with the new `/analytics` route before deploying the updated frontend. The older routes remain available to the previous frontend, subject to the new completed-week scope.
+
+Live site: [Fantasy Football Power Rankings](https://fantasy-football-power-rankings-black.vercel.app/). Local edits do not update the hosted site automatically unless they are pushed to a deployment-connected branch.

@@ -1,7 +1,5 @@
 import pandas as pd
-from pathlib import Path
-import os
-import sys
+import numpy as np
 
     
 # Helper to map user_id to display name
@@ -22,7 +20,10 @@ def calculate_z_scores(df, score_column='points'):
     return df
         
 def get_z_score(series):
-    return (series - series.mean()) / series.std()
+    std = series.std()
+    if pd.isna(std) or std == 0:
+        return pd.Series(0.0, index=series.index)
+    return (series - series.mean()) / std
 
 
 def process_matchups_data(all_matchups_data, total_rosters):
@@ -33,15 +34,21 @@ def process_matchups_data(all_matchups_data, total_rosters):
 
     df_all_matchups = pd.concat(all_matchups_data, ignore_index=True)
 
+    if 'custom_points' in df_all_matchups:
+        df_all_matchups['points'] = df_all_matchups['custom_points'].combine_first(df_all_matchups['points'])
+    # Count only the teams actually represented in each week.
+    total_possible_games_per_week = df_all_matchups.groupby('week')['roster_id'].transform('count') - 1
+
     # Rank Points for Week
     df_all_matchups['rank'] = df_all_matchups.groupby('week')['points'].rank(method='min', ascending=True)
     
     # Calculate All Play Record (The Record for if they played every team that week)
     df_all_matchups['all_play_wins'] = df_all_matchups['rank'] - 1
-    df_all_matchups['all_play_losses'] = total_possible_games_per_week - df_all_matchups['all_play_wins']
+    df_all_matchups['all_play_ties'] = df_all_matchups.groupby(['week', 'points'])['roster_id'].transform('count') - 1
+    df_all_matchups['all_play_losses'] = total_possible_games_per_week - df_all_matchups['all_play_wins'] - df_all_matchups['all_play_ties']
 
     df_all_matchups = calculate_z_scores(df_all_matchups, score_column='points')
-    return df_all_matchups[['week', 'roster_id', 'matchup_id', 'points', 'all_play_wins', 'all_play_losses', 'z_score']]
+    return df_all_matchups[['week', 'roster_id', 'matchup_id', 'points', 'all_play_wins', 'all_play_losses', 'all_play_ties', 'z_score']]
 
 
 # Helper to get true record 
@@ -109,9 +116,12 @@ def get_projections(league_data, matchups_data, weekly_projections_data):
 
 # Aggregrates Data into Season Totals
 def calculate_season_aggregates(df):
+    df = df.copy()
+    df['all_play_ties'] = df.get('all_play_ties', 0)
     return df.groupby('roster_id').agg({
         'all_play_wins': 'sum',
-        'all_play_losses': 'sum', 
+        'all_play_losses': 'sum',
+        'all_play_ties': 'sum',
         'z_score': 'sum',
         'points': 'sum'
     }).reset_index()
@@ -127,7 +137,7 @@ def get_power_rankings(season_df, projections_df, weights=None):
 
     merged_df = season_df.merge(projections_df, on='roster_id')
     
-    merged_df['z_all_play_wins'] = get_z_score(merged_df['all_play_wins'])
+    merged_df['z_all_play_wins'] = get_z_score(merged_df['all_play_wins'] + 0.5 * merged_df.get('all_play_ties', 0))
     merged_df['z_points'] = get_z_score(merged_df['points'])
     merged_df['z_projected_points'] = get_z_score(merged_df['projected_points'])
     
@@ -140,13 +150,13 @@ def get_power_rankings(season_df, projections_df, weights=None):
         merged_df['z_projected_points'] * weights['projected_points']
     )
 
-    # Map the Z-Score to a T-Score distribution (Mean=50, StdDev=10)
+    # Scale the weighted composite around 50; its SD is not necessarily 10.
     merged_df['power_index'] = 50 + (merged_df['composite_score'] * 10) 
     merged_df['power_index'] = merged_df['power_index'].clip(0, 100)
 
     # Sort by the power ranking score in descending order
     ranked_df = merged_df.sort_values(by='power_index', ascending=False).reset_index(drop=True)
-    ranked_df['rank'] = range(1, len(ranked_df) + 1)
+    ranked_df['rank'] = ranked_df['power_index'].round(4).rank(method='min', ascending=False).astype(int)
     
     return ranked_df[['rank', 'roster_id', 'power_index', 'z_points', 'z_all_play_wins', 'z_projected_points']].round(4)   
 
@@ -157,7 +167,7 @@ def calculate_trend_lines(season_df, projections_df, target_roster_id):
     
     for wk in range(1, max_week + 1):
         matchups_slice = season_df[season_df['week'] <= wk]
-        projections_slice = projections_df[projections_df['week'] <= wk]
+        projections_slice = projections_df[projections_df['week'] == wk]
         
         aggs_df = calculate_season_aggregates(matchups_slice)
         
@@ -182,15 +192,16 @@ def calculate_weekly_regular_standings(season_df):
     from the data provided in season_df.
     """
 
+    season_df = paired_matchups(season_df)
     opponents = season_df[['week', 'matchup_id', 'roster_id', 'points']].copy()
     opponents.columns = ['week', 'matchup_id', 'opponent_id', 'opponent_points']
     
     merged_df = season_df.merge(opponents, on=['week', 'matchup_id'])
     merged_df = merged_df[merged_df['roster_id'] != merged_df['opponent_id']]
     
-    merged_df['wins'] = merged_df['points'] > merged_df['opponent_points'].astype(int)
-    merged_df['losses'] = merged_df['points'] < merged_df['opponent_points'].astype(int)
-    merged_df['ties'] = merged_df['points'] == merged_df['opponent_points'].astype(int)
+    merged_df['wins'] = merged_df['points'] > merged_df['opponent_points']
+    merged_df['losses'] = merged_df['points'] < merged_df['opponent_points']
+    merged_df['ties'] = merged_df['points'] == merged_df['opponent_points']
     
     standings = merged_df.groupby('roster_id').agg({
         'wins': 'sum',
@@ -202,18 +213,19 @@ def calculate_weekly_regular_standings(season_df):
     
     standings['win_pct'] = round((standings['wins'] + (standings['ties'] * 0.5)) / (standings['wins'] + standings['losses'] + standings['ties']), 4)
     
-    return standings.sort_values(by=['wins', 'points'], ascending=False)
+    return standings.sort_values(by=['win_pct', 'points'], ascending=False)
 
 def calculate_all_wins_standings(season_df):
     df = season_df[['roster_id', 'all_play_wins', 'all_play_losses']].copy()
+    df['all_play_ties'] = season_df.get('all_play_ties', 0)
     standings = df.groupby('roster_id').agg({
         'all_play_wins': 'sum',
-        'all_play_losses': 'sum'
-        
+        'all_play_losses': 'sum',
+        'all_play_ties': 'sum'
     }).reset_index()
     
-    standings['win_pct'] = round(standings['all_play_wins'] / (standings['all_play_wins'] + standings['all_play_losses']), 4)
-    return standings.sort_values(by=['all_play_wins', 'all_play_losses'], ascending=[False, True])
+    standings['win_pct'] = round((standings['all_play_wins'] + 0.5 * standings['all_play_ties']) / (standings['all_play_wins'] + standings['all_play_losses'] + standings['all_play_ties']), 4)
+    return standings.sort_values(by=['win_pct', 'roster_id'], ascending=[False, True])
 
 def calculate_rival_standings(season_df, user_roster_id, rival_roster_id):
     u_id = int(user_roster_id)
@@ -235,3 +247,33 @@ def calculate_rival_standings(season_df, user_roster_id, rival_roster_id):
     standings['roster_id'] = u_id
     
     return standings.reset_index(drop=True)
+
+
+def paired_matchups(season_df):
+    """Only genuine two-team matchups; null IDs and byes are not games."""
+    valid = season_df[season_df['matchup_id'].notna()].copy()
+    counts = valid.groupby(['week', 'matchup_id'])['roster_id'].transform('count')
+    return valid[counts == 2]
+
+
+def calculate_schedule_advantage(season_df):
+    """Observed H2H win equivalents minus random-opponent win equivalents.
+
+    A bye contributes neither an actual game nor expected wins. All-play
+    probability uses all other teams' scores that week, with half credit for ties.
+    Median bonus games are deliberately excluded from both sides.
+    """
+    games = paired_matchups(season_df).copy()
+    denominator = games['all_play_wins'] + games['all_play_losses'] + games['all_play_ties']
+    games['expected_wins'] = (games['all_play_wins'] + .5 * games['all_play_ties']) / denominator.replace(0, np.nan)
+    expected = games.groupby('roster_id')['expected_wins'].sum()
+    standings = calculate_weekly_regular_standings(season_df).set_index('roster_id')
+    result = pd.DataFrame(index=sorted(season_df['roster_id'].unique()))
+    result.index.name = 'roster_id'
+    for column in ['wins', 'losses', 'ties']:
+        result[column] = standings[column].reindex(result.index).fillna(0).astype(int)
+    result['games'] = result['wins'] + result['losses'] + result['ties']
+    result['actual_wins'] = result['wins'] + .5 * result['ties']
+    result['expected_wins'] = expected.reindex(result.index).fillna(0)
+    result['schedule_advantage'] = result['actual_wins'] - result['expected_wins']
+    return result.reset_index()

@@ -134,3 +134,38 @@ def test_calculate_rival_standings():
     assert rival_standings.iloc[0]['losses'] == 1
     assert rival_standings.iloc[0]['points_user'] == 210
     assert rival_standings.iloc[0]['points_rival'] == 210
+
+
+def test_fractional_scores_preserve_winner_and_ties():
+    df = pd.DataFrame({'week': [1, 1, 2, 2], 'matchup_id': [1, 1, 1, 1],
+                       'roster_id': [1, 2, 1, 2], 'points': [100.2, 100.8, 90.5, 90.5]})
+    result = calculate_weekly_regular_standings(df).set_index('roster_id')
+    assert result.loc[1, 'wins'] == 0
+    assert result.loc[1, 'losses'] == 1
+    assert result.loc[2, 'wins'] == 1
+    assert result.loc[1, 'ties'] == result.loc[2, 'ties'] == 1
+
+
+def test_all_play_ties_count_as_half_a_win():
+    df = pd.DataFrame({'week': [1]*4, 'matchup_id': [1, 1, 2, 2],
+                       'roster_id': [1, 2, 3, 4], 'points': [100, 100, 90, 110]})
+    processed = process_matchups_data([df], 4)
+    result = calculate_all_wins_standings(processed).set_index('roster_id')
+    assert result.loc[1, 'all_play_wins'] == 1
+    assert result.loc[1, 'all_play_losses'] == 1
+    assert result.loc[1, 'all_play_ties'] == 1
+    assert result.loc[1, 'win_pct'] == 0.5
+
+
+def test_trends_match_dashboard_for_same_week():
+    from src.utils.calculations import calculate_trend_lines
+    weeks = [pd.DataFrame({'week': [wk]*2, 'matchup_id': [1, 1],
+                          'roster_id': [1, 2], 'points': [100+wk, 90]}) for wk in (1, 2)]
+    season = process_matchups_data(weeks, 2)
+    projections = pd.DataFrame({'week': [1, 1, 2, 2], 'roster_id': [1, 2, 1, 2],
+                                'projected_points': [200, 50, 80, 100]})
+    dashboard = get_power_rankings(calculate_season_aggregates(season), projections[projections.week == 2])
+    trend = calculate_trend_lines(season, projections, 1)
+    expected = dashboard.set_index('roster_id').loc[1]
+    assert trend.iloc[-1]['power_index'] == expected['power_index']
+    assert trend.iloc[-1]['rank'] == expected['rank']
