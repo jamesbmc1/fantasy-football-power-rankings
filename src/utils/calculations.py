@@ -35,7 +35,7 @@ def process_matchups_data(all_matchups_data, total_rosters):
     df_all_matchups = pd.concat(all_matchups_data, ignore_index=True)
 
     if 'custom_points' in df_all_matchups:
-        df_all_matchups['points'] = df_all_matchups['custom_points'].combine_first(df_all_matchups['points'])
+        df_all_matchups['points'] = df_all_matchups['points'].astype(float).where(df_all_matchups['custom_points'].isna(), df_all_matchups['custom_points'].astype(float))
     # Count only the teams actually represented in each week.
     total_possible_games_per_week = df_all_matchups.groupby('week')['roster_id'].transform('count') - 1
 
@@ -192,6 +192,7 @@ def calculate_weekly_regular_standings(season_df):
     from the data provided in season_df.
     """
 
+    roster_ids = sorted(season_df['roster_id'].unique())
     season_df = paired_matchups(season_df)
     opponents = season_df[['week', 'matchup_id', 'roster_id', 'points']].copy()
     opponents.columns = ['week', 'matchup_id', 'opponent_id', 'opponent_points']
@@ -211,7 +212,12 @@ def calculate_weekly_regular_standings(season_df):
         'opponent_points': 'sum'
     }).reset_index()
     
-    standings['win_pct'] = round((standings['wins'] + (standings['ties'] * 0.5)) / (standings['wins'] + standings['losses'] + standings['ties']), 4)
+    # Retain teams on byes, without inventing played games or PF/PA.
+    standings = standings.set_index('roster_id').reindex(roster_ids, fill_value=0).reset_index()
+    for column in ['wins', 'losses', 'ties']:
+        standings[column] = standings[column].astype(int)
+    games = standings['wins'] + standings['losses'] + standings['ties']
+    standings['win_pct'] = ((standings['wins'] + standings['ties'] * 0.5) / games.replace(0, np.nan)).fillna(0).round(4)
     
     return standings.sort_values(by=['win_pct', 'points'], ascending=False)
 

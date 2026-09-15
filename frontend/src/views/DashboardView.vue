@@ -19,7 +19,10 @@ const search = ref('')
 const visibleTeams = computed(() => rankings.value.filter(team => (team.owner_name || '').toLowerCase().includes(search.value.toLowerCase())))
 const leader = computed(() => rankings.value[0])
 const leaders = computed(() => rankings.value.filter(t => t.rank === leader.value?.rank))
-const average = computed(() => rankings.value.length ? (rankings.value.reduce((sum, t) => sum + t.power_index, 0) / rankings.value.length).toFixed(1) : '—')
+const averageWeeklyScore = computed(() => {
+  const scores = analytics.value?.weekly_scores.filter(team => team.week === analytics.value?.through_week) || []
+  return scores.length ? (scores.reduce((sum, team) => sum + team.points, 0) / scores.length).toFixed(2) : '—'
+})
 const signed = (value: number) => {
   const rounded = Number(value.toFixed(2))
   return `${rounded > 0 ? '+' : ''}${rounded.toFixed(2)}`
@@ -35,7 +38,7 @@ const signed = (value: number) => {
       <AnalyticsNotice />
       <section class="summary-grid" aria-label="League summary">
         <article class="summary-card"><p class="eyebrow">{{ leaders.length > 1 ? 'JOINT LEADERS' : 'TOP-RANKED MANAGER' }}</p><h2 class="leader-name">{{ leaders.length > 2 ? `${leaders.length} teams tied at #${leader?.rank}` : leaders.map(t => t.owner_name).join(', ') }}</h2><p><strong>{{ leader?.power_index.toFixed(1) }}</strong> Power Index</p><details v-if="leaders.length > 2" class="tied-managers"><summary>View tied managers</summary><p>{{ leaders.map(t => t.owner_name).join(', ') }}</p></details></article>
-        <article class="summary-card"><p class="eyebrow">LEAGUE AVERAGE</p><h2>{{ average }}</h2><p>Power Index across all teams</p></article>
+        <article class="summary-card"><p class="eyebrow">AVERAGE WEEKLY SCORE</p><h2>{{ averageWeeklyScore }}</h2><p>Week {{ displayWeek }} · Fantasy Points Per Team</p></article>
         <article class="summary-card"><p class="eyebrow">TEAMS RANKED</p><h2>{{ rankings.length.toString().padStart(2, '0') }}</h2><p>Cumulative results through Week {{ displayWeek }}</p></article>
       </section>
       <section class="movement-strip" aria-label="Weekly rank movement"><p><strong>Biggest riser{{ movers.risers.length > 1 ? 's' : '' }}</strong><span v-if="movers.risers.length">{{ movers.risers.map(t => t.owner_name).join(', ') }} · {{ movement(movers.risers[0]!.rank_change) }}</span><span v-else>No upward movement to report</span></p><p><strong>Biggest faller{{ movers.fallers.length > 1 ? 's' : '' }}</strong><span v-if="movers.fallers.length">{{ movers.fallers.map(t => t.owner_name).join(', ') }} · {{ movement(movers.fallers[0]!.rank_change) }}</span><span v-else>No downward movement to report</span></p><small>Versus the previous included week. N/A means no comparable previous ranking.</small></section>

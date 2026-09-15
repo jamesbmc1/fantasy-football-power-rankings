@@ -157,3 +157,20 @@ def test_nonfinite_projection_stats_are_unavailable():
     full['1']['stats']['pts']=float('nan')
     data=snapshot([(1,example([100,90,80,70]))],{1:full})
     assert all(t['projection_contribution']==0 for t in data['rankings'])
+
+
+def test_teams_without_h2h_games_remain_consistent_across_snapshot():
+    data = snapshot([(1, example([100, 90, 130, 120], [1, 1, None, None]))])
+    assert {t['roster_id'] for t in data['regular']} == {1, 2, 3, 4}
+    bye = next(t for t in data['regular'] if t['roster_id'] == 3)
+    assert all(bye[k] == 0 for k in ['wins', 'losses', 'ties', 'points', 'opponent_points', 'win_pct'])
+    history = next(t for t in data['history'] if t['roster_id'] == 3)
+    assert history['points'] == 130
+    assert history['expected_wins'] == history['wins'] == 0
+
+
+def test_all_byes_keep_zero_h2h_records_and_finite_analytics():
+    data = snapshot([(1, example([100, 90, 130, 120], [None]*4))])
+    assert len(data['regular']) == len(data['rankings']) == 4
+    assert all(t['win_pct'] == 0 for t in data['regular'])
+    assert all(t['expected_wins'] == t['actual_wins'] == 0 for t in data['schedule'])
