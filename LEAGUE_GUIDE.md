@@ -15,7 +15,7 @@ Enter your **Sleeper league ID** (the number in your league’s Sleeper URL) and
 
 ### The summary cards
 
-The cards at the top show the top-ranked manager, the league’s average Power Index, and how many teams are ranked. Joint leaders are shown together; expand **View tied managers** if several teams share first place.
+The cards at the top show the top-ranked manager, the league’s average fantasy score for the latest included week, and how many teams are ranked. The **Average weekly score** card labels its week and averages every team’s points for that week; it is not a Power Index rating or a season-long average. Changing the separate Week in review selector does not change this card. Joint leaders are shown together; expand **View tied managers** if several teams share first place.
 
 ### The Power Index and power table
 
@@ -174,6 +174,10 @@ Choosing a future week does not create results for games that have not happened.
 Sometimes the available data does not contain usable projections for every team’s starters. When that happens, the site gives **every team a neutral projection contribution** for that week so missing data does not penalize only some managers.
 
 Scoring keeps its 45% weight and all-play keeps its 40% weight. The missing 15% is not handed to those other categories, so ratings generally stay closer to 50. **N/A means unavailable, not a zero-point prediction.** H2H records, weekly scores, and expected wins do not depend on these projections.
+
+### Do projections exactly match Sleeper’s displayed total?
+
+The site multiplies the projected player stats Sleeper supplies by your league’s scoring rules and adds your starters’ results. “Available” means each occupied starter has usable scoring stats, not that every custom scoring category is supplied. Missing categories are treated as zero, so custom yardage bonuses and kicking rules may produce differences from the total displayed in Sleeper. The site does not invent missing projections or substitute actual game results for them.
 
 ### Can past numbers change?
 

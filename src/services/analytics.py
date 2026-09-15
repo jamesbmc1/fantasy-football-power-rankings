@@ -7,6 +7,8 @@ import httpx
 import pandas as pd
 from fastapi import HTTPException
 
+from src.services.score_reconciliation import reconcile_matchups
+
 from src.utils.calculations import (
     process_matchups_data, calculate_season_aggregates, get_power_rankings,
     get_projections, calculate_schedule_advantage, calculate_weekly_regular_standings,
@@ -40,7 +42,7 @@ def projection_frame(league, matchups, payload):
         for player in starters:
             entry = payload.get(player, {}) if isinstance(payload, dict) else {}
             stats = entry.get('stats') if isinstance(entry, dict) else None
-            if not isinstance(stats, dict) or not stats:
+            if not isinstance(stats, dict) or not stats or not (set(stats) & set(league.get('scoring_settings', {}))):
                 available = False
             elif any(not isinstance(v, (int, float)) or not math.isfinite(v) for k, v in stats.items() if k in league.get('scoring_settings', {})):
                 available = False
@@ -156,6 +158,13 @@ async def load_analytics(client, league_id, requested_week):
         warnings.append(f'You selected week {requested_week}. Analysis uses completed regular-season weeks only, currently through week {limit}. The current NFL week is included after Sleeper advances to the next week.')
     week_numbers = list(range(start, limit + 1))
     matchups = await asyncio.gather(*(client.get_matchups(league_id, w) for w in week_numbers))
+    owners = {u['user_id']: u.get('display_name') or u.get('username') for u in users or []}
+    names = {r['roster_id']: owners.get(r.get('owner_id')) for r in rosters or []}
+    reconciled = await asyncio.gather(*(reconcile_matchups(client, league, w, rows, names)
+                                       for w, rows in zip(week_numbers, matchups)))
+    matchups = [rows for rows, _ in reconciled]
+    for _, notes in reconciled:
+        warnings.extend(notes)
     async def optional_projections(w):
         try:
             return await client.get_weekly_projections(league['season'], w)
