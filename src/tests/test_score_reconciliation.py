@@ -110,3 +110,37 @@ def test_repaired_score_flows_into_all_analytics_and_unresolved_week_stops_histo
     later = build_snapshot(LEAGUE, [], [{'roster_id': 10}, {'roster_id': 2}], [(1, rows), (2, broken)], {}, 2)
     assert later['through_week'] == 1
     assert len(later['history']) == 2
+
+
+def test_sparse_defense_bands_score_only_applicable_categories():
+    settings = {'sack': 1, 'pts_allow_0': 5, 'pts_allow_14_20': 1,
+                'pts_allow_28_34': -1, 'yds_allow_0_100': 5,
+                'yds_allow_200_299': 2, 'yds_allow_350_399': -1}
+    stats = {'gp': 1, 'sack': 4, 'pts_allow': 17, 'pts_allow_14_20': 1,
+             'yds_allow': 285, 'yds_allow_200_299': 1}
+    assert score_actual_stats(stats, settings) == 7
+
+
+def test_valid_defense_band_need_not_be_scored_by_league():
+    stats = {'gp': 1, 'pts_allow': 30, 'pts_allow_28_34': 1,
+             'yds_allow': 329, 'yds_allow_300_349': 1}
+    assert score_actual_stats(stats, {'pts_allow_0': 5, 'yds_allow_200_299': 2}) == 0
+
+
+@pytest.mark.parametrize('bands', [{}, {'pts_allow_14_20': 0},
+    {'pts_allow_14_20': 1, 'pts_allow_7_13': 1}, {'pts_allow_14_20': float('nan')}])
+def test_incomplete_or_invalid_defense_bands_still_fail_closed(bands):
+    with pytest.raises(UnresolvedScore):
+        score_actual_stats({'gp': 1, 'pts_allow': 17, **bands}, {'pts_allow_0': 5})
+
+
+def test_week_two_defense_recovery_does_not_block_analysis():
+    client = AsyncMock()
+    client.get_player_week_stats.return_value = {'stats': {'gp': 1, 'sack': 4,
+        'pts_allow': 17, 'pts_allow_14_20': 1, 'yds_allow': 285, 'yds_allow_200_299': 1}}
+    league = {**LEAGUE, 'scoring_settings': {'sack': 1, 'pts_allow_0': 5,
+              'pts_allow_14_20': 1, 'yds_allow_200_299': 2, 'yds_allow_350_399': -1}}
+    row = {**matchup(), 'starters': ['known', 'GB']}
+    rows, notes = asyncio.run(reconcile_matchups(client, league, 2, [row]))
+    assert rows[0]['points'] == 115.86
+    assert 'Rebuilt' in notes[0]
