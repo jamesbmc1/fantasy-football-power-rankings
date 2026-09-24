@@ -55,10 +55,16 @@ def score_actual_stats(stats, settings):
                 raise UnresolvedScore(f'missing actual scoring category {key}')
             value = 0
         elif key in SPARSE_STATS:
-            if key.startswith('pts_allow_') and 'pts_allow' in stats:
-                raise UnresolvedScore(f'missing defensive scoring category {key}')
-            if key.startswith('yds_allow_') and 'yds_allow' in stats:
-                raise UnresolvedScore(f'missing defensive scoring category {key}')
+            for prefix, total_key in [('pts_allow_', 'pts_allow'), ('yds_allow_', 'yds_allow')]:
+                if key.startswith(prefix) and total_key in stats:
+                    # Actual defensive bands are sparse one-hot flags. Sleeper
+                    # sends the applicable band, not a zero for every other band.
+                    # Inspect all supported bands, even ones this league doesn't score.
+                    bands = [v for k, v in stats.items() if k in SPARSE_STATS and k.startswith(prefix)]
+                    if (not finite(stats[total_key]) or stats[total_key] < 0
+                            or not bands or not all(finite(v) and v in (0, 1) for v in bands)
+                            or sum(bands) != 1):
+                        raise UnresolvedScore(f'missing or inconsistent defensive scoring categories for {total_key}')
             if key.startswith('fgm_') and stats.get('fgm', 0):
                 buckets = [v for k, v in stats.items() if re.fullmatch(r'fgm_(\d+_\d+|60p)', k)]
                 if not all(finite(v) for v in buckets) or not finite(stats['fgm']) or not math.isclose(sum(buckets), stats['fgm'], abs_tol=1e-8):
